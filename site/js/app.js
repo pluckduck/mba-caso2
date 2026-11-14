@@ -607,14 +607,16 @@ function telaAcesso(modo = 'entrar', msg = '') {
   const cmp = (rotulo, chave, tipo, extra = {}) => campo({ rotulo, obj: d, chave, tipo, atributos: { required: true, ...extra } });
   const titulos = { entrar: 'Entrar', criar: 'Criar conta', recuperar: 'Recuperar senha', 'nova-senha': 'Definir nova senha' };
   raiz.replaceChildren(h('div', { class: 'acesso' },
-    h('div', { class: 'acesso-lado' }, h('span', { class: 'marca-sigla grande' }, 'C2'), h('h1', {}, 'Estudo de Caso 2'), h('p', {}, 'Cenários econômicos e estratégias de vendas'),
+    h('div', { class: 'acesso-lado' }, h('span', { class: 'marca-sigla grande' }, 'C2'),
+      h('p', { class: 'acesso-curso' }, h('span', { class: 'kicker' }, 'Cenários Econômicos em Vendas'), h('span', { class: 'acesso-prof' }, 'Prof. Dr. José Alberto de Camargo')),
+      h('h1', {}, 'Estudo de Caso 2'), h('p', {}, 'Cenários econômicos e estratégias de vendas'),
       h('p', { class: 'ajuda' }, 'MBA Gestão Comercial e SalesTech · roteiro guiado com os dados do Relatório Focus e da Carta de Conjuntura do Ipea, e geração dos cinco slides da entrega.')),
     h('form', { class: 'acesso-form cartao', onsubmit: enviar },
       h('h2', {}, titulos[modo]),
       modo === 'criar' ? cmp('Nome completo', 'nome', 'text', { autocomplete: 'name' }) : null,
       modo !== 'nova-senha' ? cmp('E-mail', 'email', 'email', { autocomplete: 'email' }) : null,
       modo !== 'recuperar' ? cmp(modo === 'nova-senha' ? 'Nova senha' : 'Senha', 'senha', 'password', { autocomplete: modo === 'entrar' ? 'current-password' : 'new-password', minlength: modo === 'entrar' ? null : 8 }) : null,
-      modo === 'criar' ? campo({ rotulo: 'Código da turma', ajuda: 'Código informado pelo colega que administra o aplicativo.', obj: d, chave: 'codigo', tipo: 'text', atributos: { required: true, autocomplete: 'off' } }) : null,
+      modo === 'criar' ? campo({ rotulo: 'Código da turma (peça pro Daniel Fassa)', obj: d, chave: 'codigo', tipo: 'text', atributos: { required: true, autocomplete: 'off' } }) : null,
       erro,
       h('button', { type: 'submit', class: 'btn primario' }, { entrar: 'Entrar', criar: 'Criar conta e entrar', recuperar: 'Enviar link', 'nova-senha': 'Salvar nova senha' }[modo]),
       h('div', { class: 'acesso-links' },
