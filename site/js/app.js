@@ -212,6 +212,11 @@ function etapa1() {
   const c = estado.caso;
   const marcadas = c.variaveis.filter(v => v.tipo || v.nome);
   const externasMarcadas = VARIAVEIS.filter(v => v.externa && c.variaveis.some(x => x.tipo === v.id));
+  // Botão "Abrir/Recolher todos os temas": age direto nos <details>; o rótulo acompanha o estado real da tela.
+  let todosAbertos = true;
+  const temasNaTela = () => [...document.querySelectorAll('.grupo-vars')];
+  const rotuloTemas = () => { const t = temasNaTela(); if (t.length) botaoTemas.textContent = t.every(d => d.open) ? 'Recolher todos os temas' : 'Abrir todos os temas'; };
+  const botaoTemas = botao('Abrir todos os temas', () => { const t = temasNaTela(); const abrir = !t.every(d => d.open); t.forEach(d => { d.open = abrir; }); rotuloTemas(); });
   return h('div', { class: 'vista' }, cabecalhoEtapa(1),
     h('section', { class: 'cartao' }, h('h2', {}, 'Identificação'),
       h('div', { class: 'grade-2' },
@@ -226,14 +231,21 @@ function etapa1() {
       h('div', { class: 'legenda-fontes' },
         h('span', {}, selo('Focus', 'focus'), selo('Ipea', 'ipea'), 'dados já carregados no aplicativo'),
         h('span', {}, selo('Fonte externa', 'externa'), 'não consta dos dois relatórios; o aplicativo indica onde buscar')),
+      h('div', { class: 'grupos-barra' },
+        h('p', {}, 'Clique em um tema para abrir a lista de indicadores.'),
+        botaoTemas),
       GRUPOS.map(g => {
         const lista = variaveisDoGrupo(g.id);
         const sel = lista.filter(v => c.variaveis.some(x => x.tipo === v.id)).length;
         const aberto = gruposAbertos.has(g.id) || (gruposAbertos.size === 0 && (sel > 0 || g.id === 'precos'));
-        return h('details', { class: 'grupo-vars', open: aberto, ontoggle: e => { e.target.open ? gruposAbertos.add(g.id) : gruposAbertos.delete(g.id); if (!e.target.open && gruposAbertos.size === 0) gruposAbertos.add('_'); } },
-          h('summary', {}, h('span', { class: 'grupo-nome' }, g.nome), h('span', { class: 'grupo-n' }, `(${lista.length} indicadores)`), sel ? h('span', { class: 'grupo-sel' }, `${sel} selecionado${sel > 1 ? 's' : ''}`) : null),
+        if (!aberto) todosAbertos = false;
+        return h('details', { class: 'grupo-vars', open: aberto, ontoggle: e => { e.target.open ? gruposAbertos.add(g.id) : gruposAbertos.delete(g.id); if (!e.target.open && gruposAbertos.size === 0) gruposAbertos.add('_'); rotuloTemas(); } },
+          h('summary', {},
+            h('span', { class: 'grupo-titulo' }, h('span', { class: 'grupo-nome' }, g.nome), h('span', { class: 'grupo-n' }, `${lista.length} indicadores`), sel ? h('span', { class: 'grupo-sel' }, `${sel} selecionado${sel > 1 ? 's' : ''}`) : null),
+            h('span', { class: 'grupo-acao' }, h('span', { class: 'abrir' }, 'Ver indicadores'), h('span', { class: 'fechar' }, 'Ocultar'))),
           h('div', { class: 'chips grandes' }, lista.map(chipVariavel)));
       }),
+      (botaoTemas.textContent = todosAbertos ? 'Recolher todos os temas' : 'Abrir todos os temas', null),
       h('div', { class: 'chips grandes' }, h('button', { class: 'chip', onclick: () => alternarVariavel('outra') }, '+ Outra variável')),
       externasMarcadas.length ? h('div', { class: 'aviso-externa' },
         h('strong', {}, externasMarcadas.length > 1 ? 'Variáveis que não constam do Focus nem da Carta de Conjuntura' : `${externasMarcadas[0].nome} não consta do Focus nem da Carta de Conjuntura`),
