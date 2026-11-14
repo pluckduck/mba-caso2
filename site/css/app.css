@@ -1,4 +1,4 @@
-/* As cores, fontes e raios vêm do tema escolhido (variáveis definidas em js/themes.js). */
+/* Aparência fixa do aplicativo (tema original). O tema escolhido pelo participante vale só para os slides. */
 :root {
   --c-fundo: #F6F7F9; --c-superficie: #FFFFFF; --c-texto: #1B2430; --c-suave: #5B6675; --c-primaria: #14305A;
   --c-sobrePrimaria: #FFFFFF; --c-destaque: #B8862B; --c-borda: #D9DEE5; --c-favoravel: #2E7D5B; --c-adverso: #B4433A; --c-base: #3F6FA8;

@@ -496,7 +496,7 @@ function imprimir() {
   window.print();
 }
 function seletorTema() {
-  const sel = h('select', { 'aria-label': 'Tema visual', onchange: e => { estado.tema = { id: e.target.value }; aplicarTemaNaInterface(temaAtual()); mudou(); redesenhar(); } }, TEMAS.map(t => h('option', { value: t.id }, t.nome)));
+  const sel = h('select', { 'aria-label': 'Tema visual', onchange: e => { estado.tema = { id: e.target.value }; mudou(); redesenhar(); } }, TEMAS.map(t => h('option', { value: t.id }, t.nome)));
   sel.value = temaAtual().id;
   return sel;
 }
@@ -576,7 +576,6 @@ function vistaTema() {
   const garantir = k => (estado.tema[k] ||= {});
   const atualizar = (redesenharPainel = false, salvar = true) => {
     const tema = temaAtual();
-    aplicarTemaNaInterface(tema);
     previa.replaceChildren(montarSlide(construir(c, tema).slides[slidePrev], tema));
     const pares = [['Texto sobre o fundo', tema.cores.texto, tema.cores.fundo], ['Texto sobre cartões', tema.cores.texto, tema.cores.superficie], ['Texto sobre a cor principal', tema.cores.sobrePrimaria, tema.cores.primaria], ['Texto secundário', tema.cores.suave, tema.cores.fundo]];
     contr.replaceChildren(...pares.map(([n, a, b]) => { const r = contraste(a, b); return h('span', { class: `selo ${r >= 4.5 ? 'obs' : 'alerta'}`, title: 'Razão de contraste (recomendado: 4,5 ou mais)' }, `${n}: ${fmt(r, 1)}:1 ${r >= 4.5 ? '✓' : '— baixo'}`); }));
@@ -604,8 +603,8 @@ function vistaTema() {
   };
   desenharGaleria(); desenharEditor(); atualizar(false, false);
   return h('div', { class: 'vista larga' },
-    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Aparência do aplicativo e dos slides'), h('h1', {}, 'Tema visual'),
-      h('p', { class: 'lead' }, 'Escolha um dos dez temas e personalize cores, tipografia e elementos. A escolha vale para o aplicativo, para os slides na tela e para o arquivo PPTX exportado.')),
+    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Aparência dos slides'), h('h1', {}, 'Tema visual'),
+      h('p', { class: 'lead' }, 'Escolha um dos dez temas e personalize cores, tipografia e elementos. A escolha vale apenas para os slides: na tela, no modo de apresentação e nos arquivos PPTX e PDF exportados. A aparência do aplicativo não muda.')),
     h('section', { class: 'cartao' }, h('h2', {}, 'Dez temas'), galeria),
     h('div', { class: 'tema-dupla' },
       h('section', { class: 'cartao' }, h('h2', {}, 'Personalização'), painelEd),
@@ -756,11 +755,11 @@ async function iniciarSessao() {
     if (api.remoto && /sess[aã]o/i.test(e.message)) return telaAcesso('entrar', e.message);
     aviso(`Falha ao carregar os dados: ${e.message}`, 'erro');
   }
-  aplicarTemaNaInterface(temaAtual());
   montarCasca();
 }
 
-aplicarTemaNaInterface(temaAtual());
+// A interface do aplicativo tem aparência fixa (tema original); o tema escolhido pelo participante vale só para os slides.
+aplicarTemaNaInterface(resolverTema({ id: 'executivo' }));
 if (api.capturarRecuperacao()) telaAcesso('nova-senha');
 else if (api.remoto && !api.usuario()) telaAcesso('entrar');
 else iniciarSessao();
