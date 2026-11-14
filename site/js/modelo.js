@@ -198,8 +198,7 @@ export function progresso(itens) {
 // Monta o registro de evidência a partir de uma célula do Focus.
 export function evidenciaFocus(linha, periodo, tipoHorizonte) {
   const c = linha.v[periodo];
-  const mapa = { ipca: 'inflacao', selic: 'juros', pib: 'pib', cambio: 'cambio', igpm: 'igpm' };
-  const cat = catalogo(mapa[linha.id]);
+  const cat = VARIAVEIS.find(x => x.focus === linha.id) || null;
   const comp = { alta: 'revisão para cima', queda: 'revisão para baixo', estavel: 'estabilidade' }[c.comp];
   const perTxt = tipoHorizonte === 'anual' ? `fim de ${periodo}` : (periodo.startsWith('Infl') ? 'próximos 12 meses (suavizada)' : periodo);
   return {
@@ -218,8 +217,7 @@ export function evidenciaFocus(linha, periodo, tipoHorizonte) {
 
 // Monta o registro de evidência a partir de um indicador da Carta de Conjuntura do Ipea.
 export function evidenciaIpea(r) {
-  const mapa = { ipca: 'inflacao', selic: 'juros', pib: 'pib', cambio: 'cambio', desemprego: 'desemprego', renda: 'renda', credito: 'credito', consumo: 'consumo', fbcf: 'investimento' };
-  const cat = catalogo(mapa[r.chave]);
+  const cat = (r.chave && VARIAVEIS.find(x => x.ipea === r.chave)) || null;
   return {
     tipo: cat?.id || 'outra',
     nome: cat?.nome || r.indicador,

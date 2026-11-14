@@ -186,6 +186,22 @@ input[type="color"] { width: 40px; height: 32px; padding: 2px; flex: none; }
 .chaves { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .6rem 0 1rem; } .chave { display: flex; align-items: center; gap: .4rem; font-weight: 400; }
 .contrastes { display: flex; flex-wrap: wrap; }
 
+.legenda-fontes { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; align-items: center; padding: .6rem .8rem; background: var(--tom); border-radius: var(--raio); font-size: .84rem; margin-bottom: .8rem; }
+.legenda-fontes span { display: inline-flex; align-items: center; flex-wrap: wrap; }
+.selo.externa { border-style: dashed; border-color: var(--c-destaque); }
+.sensib-linha .selo, .variavel h3 .selo { margin-left: .5rem; vertical-align: middle; font-family: var(--f-corpo); }
+.grupo-vars { border-top: 1px solid var(--c-borda); padding: .2rem 0; }
+.grupo-vars summary { cursor: pointer; padding: .6rem .2rem; display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; min-height: 44px; list-style-position: inside; }
+.grupo-vars summary::marker { color: var(--c-suave); }
+.grupo-nome { font-family: var(--f-titulo); font-weight: 700; font-size: 1.02rem; display: inline; }
+.grupo-n { font-size: .84rem; color: var(--c-suave); }
+.grupo-sel { font-size: .76rem; font-weight: 700; padding: .1rem .55rem; border-radius: 99px; background: var(--c-primaria); color: var(--c-sobrePrimaria); }
+.grupo-vars .chips { padding: .2rem 0 .8rem; }
+.chip.externa:not(.ativo) { border-style: dashed; border-color: var(--c-destaque); }
+.aviso-externa { border: 1px solid var(--c-destaque); background: color-mix(in srgb, var(--c-destaque) 10%, var(--c-superficie)); border-radius: var(--raio); padding: .8rem 1rem; margin: .8rem 0; font-size: .9rem; }
+.aviso-externa p { margin: .3rem 0; } .onde-buscar { display: flex; flex-direction: column; gap: .15rem; margin: .4rem 0; } .onde-buscar span { font-weight: 700; } .onde-buscar a { font-weight: 600; }
+.variavel.externa { border-left-style: dashed; border-left-color: var(--c-destaque); }
+
 /* Turma (administração) */
 .prog { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; min-width: 220px; }
 .prog-trilho { flex: 1 1 120px; height: 10px; border-radius: 99px; background: var(--tom); overflow: hidden; }

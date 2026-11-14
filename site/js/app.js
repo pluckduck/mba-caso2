@@ -1,7 +1,7 @@
 // Aplicativo guiado do Estudo de Caso 2 — Cenários Econômicos e Estratégias de Vendas.
 import * as api from './api.js';
 import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } from './ui.js';
-import { FOCUS, IPEA, VARIAVEIS, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
+import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
   horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples } from './modelo.js';
@@ -202,9 +202,16 @@ function alternarVariavel(catId) {
   mudou(); redesenhar();
 }
 
+const gruposAbertos = new Set();
+function chipVariavel(v) {
+  const ativa = estado.caso.variaveis.some(x => x.tipo === v.id);
+  const origem = v.externa ? 'Fonte externa' : [v.focus && 'Focus', v.ipea && 'Ipea'].filter(Boolean).join(' · ');
+  return h('button', { class: `chip ${ativa ? 'ativo' : ''} ${v.externa ? 'externa' : ''}`, 'aria-pressed': String(ativa), onclick: () => alternarVariavel(v.id) }, v.nome, h('small', {}, origem));
+}
 function etapa1() {
   const c = estado.caso;
   const marcadas = c.variaveis.filter(v => v.tipo || v.nome);
+  const externasMarcadas = VARIAVEIS.filter(v => v.externa && c.variaveis.some(x => x.tipo === v.id));
   return h('div', { class: 'vista' }, cabecalhoEtapa(1),
     h('section', { class: 'cartao' }, h('h2', {}, 'Identificação'),
       h('div', { class: 'grade-2' },
@@ -216,14 +223,26 @@ function etapa1() {
       C({ rotulo: 'Dinâmica do mercado', ajuda: 'Características do mercado relevantes para o desempenho comercial (concorrência, sazonalidade, canais, dependência de crédito ou de importados).', obj: c.diag, chave: 'mercado' })),
     h('section', { class: 'cartao' }, h('h2', {}, 'Exposição macroeconômica'),
       h('p', { class: 'ajuda' }, 'Marque no mínimo três variáveis econômicas relevantes para a empresa. Elas serão investigadas na etapa 2 e projetadas na etapa 3.'),
-      h('div', { class: 'chips grandes' }, VARIAVEIS.map(v => {
-        const ativa = v.id !== 'outra' && c.variaveis.some(x => x.tipo === v.id);
-        const fontesDisp = [v.focus && 'Focus', v.ipea && 'Ipea'].filter(Boolean).join(' · ');
-        return h('button', { class: `chip ${ativa ? 'ativo' : ''}`, 'aria-pressed': String(ativa), onclick: () => alternarVariavel(v.id) }, v.id === 'outra' ? '+ Outra variável' : v.nome, fontesDisp ? h('small', {}, fontesDisp) : null);
-      })),
+      h('div', { class: 'legenda-fontes' },
+        h('span', {}, selo('Focus', 'focus'), selo('Ipea', 'ipea'), 'dados já carregados no aplicativo'),
+        h('span', {}, selo('Fonte externa', 'externa'), 'não consta dos dois relatórios; o aplicativo indica onde buscar')),
+      GRUPOS.map(g => {
+        const lista = variaveisDoGrupo(g.id);
+        const sel = lista.filter(v => c.variaveis.some(x => x.tipo === v.id)).length;
+        const aberto = gruposAbertos.has(g.id) || (gruposAbertos.size === 0 && (sel > 0 || g.id === 'precos'));
+        return h('details', { class: 'grupo-vars', open: aberto, ontoggle: e => { e.target.open ? gruposAbertos.add(g.id) : gruposAbertos.delete(g.id); if (!e.target.open && gruposAbertos.size === 0) gruposAbertos.add('_'); } },
+          h('summary', {}, h('span', { class: 'grupo-nome' }, g.nome), h('span', { class: 'grupo-n' }, `(${lista.length} indicadores)`), sel ? h('span', { class: 'grupo-sel' }, `${sel} selecionado${sel > 1 ? 's' : ''}`) : null),
+          h('div', { class: 'chips grandes' }, lista.map(chipVariavel)));
+      }),
+      h('div', { class: 'chips grandes' }, h('button', { class: 'chip', onclick: () => alternarVariavel('outra') }, '+ Outra variável')),
+      externasMarcadas.length ? h('div', { class: 'aviso-externa' },
+        h('strong', {}, externasMarcadas.length > 1 ? 'Variáveis que não constam do Focus nem da Carta de Conjuntura' : `${externasMarcadas[0].nome} não consta do Focus nem da Carta de Conjuntura`),
+        h('p', {}, 'O aplicativo não tem dados para sugerir. Na etapa 2, o valor, a fonte, a data de publicação e o período de referência deverão ser preenchidos manualmente.'),
+        externasMarcadas.map(v => h('div', { class: 'onde-buscar' }, h('span', {}, `Onde buscar — ${v.nome}:`), v.fontes.map(f => h('a', { href: f.url, target: '_blank', rel: 'noopener' }, `${f.nome} ↗`)))),
+        h('p', { class: 'ajuda' }, 'A consulta ao Relatório Focus e à Carta de Conjuntura continua obrigatória, mesmo quando a variável vem de outra fonte.')) : null,
       marcadas.length ? h('div', { class: 'sensib' }, h('h3', {}, 'Sensibilidade do negócio a cada variável'),
         marcadas.map(v => h('div', { class: 'sensib-linha' },
-          h('span', {}, v.nome || 'Outra variável (defina o nome na etapa 2)'),
+          h('span', {}, v.nome || 'Outra variável (defina o nome na etapa 2)', catalogo(v.tipo)?.externa ? selo('Fonte externa', 'externa') : null),
           h('div', { class: 'segmentos', role: 'radiogroup', 'aria-label': `Sensibilidade a ${v.nome}` }, [[1, 'Baixa'], [2, 'Média'], [3, 'Alta']].map(([n, t]) =>
             h('button', { role: 'radio', 'aria-checked': String(Number(v.sensibilidade) === n), class: Number(v.sensibilidade) === n ? 'ativo' : '', onclick: () => { v.sensibilidade = n; mudou(); redesenhar(); } }, t)))))) : null,
       C({ rotulo: 'Variáveis prioritárias e mecanismos de transmissão', ajuda: 'Explique por quais mecanismos essas variáveis afetam o negócio (por exemplo: juros → custo do financiamento do cliente → adiamento de compras).', obj: c.diag, chave: 'exposicao', linhas: 4 })),
@@ -250,12 +269,18 @@ function roteiro(v) {
 }
 function cartaoVariavel(v, i) {
   const c = estado.caso;
-  return h('section', { class: 'cartao variavel' },
-    h('div', { class: 'cab-linha' }, h('h3', {}, `Variável ${i + 1}`, v.nome ? ` — ${v.nome}` : ''),
-      h('div', { class: 'acoes' }, botao('Buscar no Focus ou no Ipea', () => abrirBusca(v), 'primario pequeno'),
+  const cat = catalogo(v.tipo);
+  const ext = Boolean(cat?.externa);
+  return h('section', { class: `cartao variavel ${ext ? 'externa' : ''}` },
+    h('div', { class: 'cab-linha' }, h('h3', {}, `Variável ${i + 1}`, v.nome ? ` — ${v.nome}` : '', ext ? selo('Fonte externa', 'externa') : null),
+      h('div', { class: 'acoes' }, ext ? null : botao('Buscar no Focus ou no Ipea', () => abrirBusca(v), 'primario pequeno'),
         botao('Remover', () => { if (!temDadosVar(v) || confirm('Remover esta variável e suas evidências?')) { removerVariavel(v.uid); mudou(); redesenhar(); } }, 'fantasma pequeno'))),
+    ext ? h('div', { class: 'aviso-externa' },
+      h('strong', {}, 'Esta variável não consta do Focus nem da Carta de Conjuntura'),
+      h('p', {}, 'Preencha os campos abaixo com o dado encontrado na fonte indicada, informando a data de publicação e o período de referência.'),
+      h('div', { class: 'onde-buscar' }, h('span', {}, 'Onde buscar:'), cat.fontes.map(f => h('a', { href: f.url, target: '_blank', rel: 'noopener' }, `${f.nome} ↗`)))) : null,
     h('div', { class: 'grade-3' },
-      C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...VARIAVEIS.map(x => [x.id, x.nome])], aoMudar: val => { const cat = catalogo(val); if (cat && val !== 'outra') { v.nome = cat.nome; v.unidade = cat.unidade; } mudou(); redesenhar(); } }),
+      C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...GRUPOS.flatMap(g => variaveisDoGrupo(g.id).map(x => [x.id, `${g.nome} — ${x.nome}${x.externa ? ' (fonte externa)' : ''}`])), ['outra', 'Outra variável']], aoMudar: val => { const cat = catalogo(val); if (cat && val !== 'outra') { v.nome = cat.nome; v.unidade = cat.unidade; } mudou(); redesenhar(); } }),
       C({ rotulo: 'Nome da variável', obj: v, chave: 'nome', tipo: 'text', placeholder: 'Ex.: Taxa de juros (Selic)' }),
       C({ rotulo: 'Unidade', obj: v, chave: 'unidade', tipo: 'text', placeholder: '%, % a.a., R$/US$…' })),
     h('div', { class: 'grade-2' },
@@ -316,7 +341,7 @@ function etapa3() {
     };
     return h('section', { class: 'cartao' },
       h('div', { class: 'cab-linha' }, h('h3', {}, v.nome), h('span', { class: 'ajuda' }, v.dado ? `Evidência registrada: ${v.dado} (${v.periodo || 'período não informado'})` : 'Sem evidência registrada na etapa 2')),
-      refs.length ? h('p', { class: 'refs' }, 'Referências publicadas: ', refs.map(r => h('span', { class: `selo ${r.origem}`, title: `${r.fonte} — ${r.periodo}` }, `${r.rotulo}: ${fmt(r.valor)}`))) : h('p', { class: 'ajuda' }, 'Não há projeção publicada para esta variável nos arquivos de apoio; os valores serão hipóteses do autor.'),
+      refs.length ? h('p', { class: 'refs' }, 'Referências publicadas: ', refs.map(r => h('span', { class: `selo ${r.origem}`, title: `${r.fonte} — ${r.periodo}` }, `${r.rotulo}: ${fmt(r.valor)}`))) : h('p', { class: 'ajuda' }, 'Não há projeção publicada para esta variável no Focus nem na Carta de Conjuntura; os valores serão marcados como hipótese do autor. Se a fonte externa publicar projeções, cite-as na justificativa.'),
       h('div', { class: 'grade-3 cen-grade' }, CENARIOS.map(coluna)));
   };
   const listar = (s, tipo) => {

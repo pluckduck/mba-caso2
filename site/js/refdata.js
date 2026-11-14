@@ -87,11 +87,11 @@ export const IPEA = {
     { id: 'pib_1t26_margem', tema: 'Atividade', indicador: 'PIB — 1º tri/2026 ante 4º tri/2025 (dessazonalizado)', valor: 1.1, unidade: '%', periodo: '1º trimestre de 2026', natureza: OBS, pagina: 1, nota: 'Acima da previsão anterior do Ipea (0,8%).' },
     { id: 'pib_4tri', tema: 'Atividade', indicador: 'PIB — acumulado em quatro trimestres', valor: 2.0, unidade: '%', periodo: 'até o 1º trimestre de 2026', natureza: OBS, pagina: 26, nota: 'Desaceleração ante 2,3% no período anterior.' },
     { id: 'carry_2026', tema: 'Atividade', indicador: 'Carry-over (carregamento estatístico) para 2026', valor: 1.4, unidade: '%', periodo: '2026', natureza: OBS, pagina: 26, nota: 'Era de 0,2% antes do resultado do 1º trimestre.' },
-    { id: 'pim_mai26', tema: 'Atividade', indicador: 'Produção industrial (PIM-PF) — variação na margem', valor: -0.2, unidade: '%', periodo: 'maio de 2026', natureza: OBS, pagina: 16, nota: 'Interrompe quatro meses de alta (ganho acumulado de 4,3%); 16 dos 25 ramos avançaram.' },
-    { id: 'pmc_abr26_restrito', tema: 'Atividade', indicador: 'Varejo restrito (PMC) — variação na margem', valor: -1.5, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 16, nota: 'Série dessazonalizada.' },
-    { id: 'pmc_abr26_ampliado', tema: 'Atividade', indicador: 'Varejo ampliado (PMC) — variação na margem', valor: -0.7, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 16, nota: 'Série dessazonalizada.' },
-    { id: 'pms_abr26_margem', tema: 'Atividade', indicador: 'Volume de serviços (PMS) — variação na margem', valor: 1.2, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 17, nota: 'Recupera a perda de março (-1,1%); avanço disseminado.' },
-    { id: 'pms_abr26_aa', tema: 'Atividade', indicador: 'Volume de serviços (PMS) — variação interanual', valor: 1.9, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 17, nota: '25ª taxa interanual positiva consecutiva.' },
+    { id: 'pim_mai26', tema: 'Atividade', indicador: 'Produção industrial (PIM-PF) — variação na margem', valor: -0.2, unidade: '%', periodo: 'maio de 2026', natureza: OBS, pagina: 16, nota: 'Interrompe quatro meses de alta (ganho acumulado de 4,3%); 16 dos 25 ramos avançaram.', chave: 'industria' },
+    { id: 'pmc_abr26_restrito', tema: 'Atividade', indicador: 'Varejo restrito (PMC) — variação na margem', valor: -1.5, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 16, nota: 'Série dessazonalizada.', chave: 'varejo' },
+    { id: 'pmc_abr26_ampliado', tema: 'Atividade', indicador: 'Varejo ampliado (PMC) — variação na margem', valor: -0.7, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 16, nota: 'Série dessazonalizada.', chave: 'varejo' },
+    { id: 'pms_abr26_margem', tema: 'Atividade', indicador: 'Volume de serviços (PMS) — variação na margem', valor: 1.2, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 17, nota: 'Recupera a perda de março (-1,1%); avanço disseminado.', chave: 'servicos' },
+    { id: 'pms_abr26_aa', tema: 'Atividade', indicador: 'Volume de serviços (PMS) — variação interanual', valor: 1.9, unidade: '%', periodo: 'abril de 2026', natureza: OBS, pagina: 17, nota: '25ª taxa interanual positiva consecutiva.', chave: 'servicos' },
 
     // Projeções do PIB e componentes (Tabela 5.1)
     { id: 'pib_2026', tema: 'Projeções PIB', indicador: 'PIB', valor: 2.3, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Revisado de 1,8% para 2,3%. Observado: 3,4% (2024) e 2,3% (2025).', chave: 'pib', ano: 2026 },
@@ -102,21 +102,21 @@ export const IPEA = {
     { id: 'agro_2026', tema: 'Projeções PIB', indicador: 'Agropecuária', valor: 1.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 2,0%. Observado em 2025: 11,7%.', chave: 'agro', ano: 2026 },
     { id: 'consumo_2026', tema: 'Projeções PIB', indicador: 'Consumo das famílias', valor: 1.9, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Observado: 5,1% (2024) e 1,3% (2025).', chave: 'consumo', ano: 2026 },
     { id: 'consumo_2027', tema: 'Projeções PIB', indicador: 'Consumo das famílias', valor: 1.7, unidade: '%', periodo: '2027', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1.', chave: 'consumo', ano: 2027 },
-    { id: 'governo_2026', tema: 'Projeções PIB', indicador: 'Consumo do governo', valor: 1.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 2,0%.' },
+    { id: 'governo_2026', tema: 'Projeções PIB', indicador: 'Consumo do governo', valor: 1.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 2,0%.', chave: 'governo', ano: 2026 },
     { id: 'fbcf_2026', tema: 'Projeções PIB', indicador: 'Investimento (FBCF)', valor: 1.2, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Revisado de queda para alta; núcleo sensível a juros segue contido.', chave: 'fbcf', ano: 2026 },
     { id: 'fbcf_2027', tema: 'Projeções PIB', indicador: 'Investimento (FBCF)', valor: 3.1, unidade: '%', periodo: '2027', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Efeitos defasados da flexibilização monetária.', chave: 'fbcf', ano: 2027 },
-    { id: 'export_2026', tema: 'Projeções PIB', indicador: 'Exportações de bens e serviços', valor: 4.5, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 2,7%.' },
-    { id: 'import_2026', tema: 'Projeções PIB', indicador: 'Importações de bens e serviços', valor: 3.3, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 4,0%.' },
+    { id: 'export_2026', tema: 'Projeções PIB', indicador: 'Exportações de bens e serviços', valor: 4.5, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 2,7%.', chave: 'exportacoes', ano: 2026 },
+    { id: 'import_2026', tema: 'Projeções PIB', indicador: 'Importações de bens e serviços', valor: 3.3, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.1. Projeção para 2027: 4,0%.', chave: 'importacoes', ano: 2026 },
 
     // Preços
     { id: 'ipca_12m_fev26', tema: 'Preços', indicador: 'IPCA — acumulado em 12 meses', valor: 3.8, unidade: '%', periodo: 'fevereiro de 2026', natureza: OBS, pagina: 7, nota: 'Ponto de partida antes do choque de oferta.' },
     { id: 'ipca_12m_mai26', tema: 'Preços', indicador: 'IPCA — acumulado em 12 meses', valor: 4.7, unidade: '%', periodo: 'maio de 2026', natureza: OBS, pagina: 7, nota: 'Acima do limite superior da meta de inflação (4,5%).' },
     { id: 'ipca_2026', tema: 'Preços', indicador: 'IPCA', valor: 5.3, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior (março/2026): 4,2%.', chave: 'ipca', ano: 2026 },
-    { id: 'ipca_alim_2026', tema: 'Preços', indicador: 'IPCA — alimentos no domicílio', valor: 7.3, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 3,9%. Contribuição de 1,2 p.p. para o IPCA.' },
-    { id: 'ipca_ind_2026', tema: 'Preços', indicador: 'IPCA — bens industriais', valor: 3.6, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 2,6%. Contribuição de 0,8 p.p.' },
-    { id: 'ipca_serv_2026', tema: 'Preços', indicador: 'IPCA — serviços (totais)', valor: 5.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 5,5%. Contribuição de 2,1 p.p.' },
-    { id: 'ipca_adm_2026', tema: 'Preços', indicador: 'IPCA — preços administrados', valor: 4.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 4,3%. Contribuição de 1,2 p.p.' },
-    { id: 'brent', tema: 'Preços', indicador: 'Petróleo Brent — preço do barril', valor: 75, unidade: 'US$', periodo: 'fim de junho de 2026', natureza: OBS, pagina: 30, nota: 'Cerca de US$ 72 no fim de fevereiro; acima de US$ 130 no início de abril; próximo de US$ 100 até meados de maio.' },
+    { id: 'ipca_alim_2026', tema: 'Preços', indicador: 'IPCA — alimentos no domicílio', valor: 7.3, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 3,9%. Contribuição de 1,2 p.p. para o IPCA.', chave: 'alimentos', ano: 2026 },
+    { id: 'ipca_ind_2026', tema: 'Preços', indicador: 'IPCA — bens industriais', valor: 3.6, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 2,6%. Contribuição de 0,8 p.p.', chave: 'bens_industriais', ano: 2026 },
+    { id: 'ipca_serv_2026', tema: 'Preços', indicador: 'IPCA — serviços (totais)', valor: 5.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 5,5%. Contribuição de 2,1 p.p.', chave: 'servicos_precos', ano: 2026 },
+    { id: 'ipca_adm_2026', tema: 'Preços', indicador: 'IPCA — preços administrados', valor: 4.8, unidade: '%', periodo: '2026', natureza: PROJ, pagina: 31, nota: 'Tabela 5.3. Projeção anterior: 4,3%. Contribuição de 1,2 p.p.', chave: 'ipca_adm', ano: 2026 },
+    { id: 'brent', tema: 'Preços', indicador: 'Petróleo Brent — preço do barril', valor: 75, unidade: 'US$', periodo: 'fim de junho de 2026', natureza: OBS, pagina: 30, nota: 'Cerca de US$ 72 no fim de fevereiro; acima de US$ 130 no início de abril; próximo de US$ 100 até meados de maio.', chave: 'petroleo' },
 
     // Juros e câmbio (Tabela 5.2)
     { id: 'selic_2026', tema: 'Juros e câmbio', indicador: 'Taxa Selic — fim de período', valor: 12.5, unidade: '% a.a.', periodo: '2026', natureza: PROJ, pagina: 29, nota: 'Tabela 5.2. Atenção: o texto da mesma página menciona hipótese de 14% a.a. no fim de 2026; confira no original antes de citar. Observado: 12,25% (2024) e 15,00% (2025).', chave: 'selic', ano: 2026 },
@@ -135,8 +135,8 @@ export const IPEA = {
     { id: 'credito_total_pf', tema: 'Crédito e famílias', indicador: 'Crédito total a pessoas físicas — crescimento real', valor: 7.0, unidade: '% a.a.', periodo: 'desde o aperto monetário (set/2024)', natureza: OBS, pagina: 5, nota: 'Valor aproximado informado pela fonte; sinais de acomodação nos dois meses mais recentes.', chave: 'credito' },
     { id: 'credito_emergencial', tema: 'Crédito e famílias', indicador: 'Crédito emergencial (cheque especial e cartão rotativo/parcelado) — variação real', valor: 22, unidade: '%', periodo: 'setembro de 2024 a maio de 2026', natureza: OBS, pagina: 2, nota: 'O dobro do ritmo do crédito livre a pessoas físicas como um todo.', chave: 'credito' },
     { id: 'selic_credito_lp', tema: 'Crédito e famílias', indicador: 'Efeito de +1 p.p. na Selic sobre concessões de longo prazo a pessoas físicas', valor: -3.7, unidade: '% em 12 meses', periodo: 'estudo do BCB (março de 2026)', natureza: ANA, pagina: 2, nota: 'Único canal de crédito com transmissão estatisticamente significativa, segundo o estudo citado.' },
-    { id: 'servico_divida', tema: 'Crédito e famílias', indicador: 'Despesas das famílias com serviço da dívida — crescimento real', valor: 10, unidade: '% a.a.', periodo: 'desde setembro de 2024', natureza: OBS, pagina: 6, nota: 'Valor aproximado ("perto de 10% ao ano"). A renda líquida do serviço da dívida ainda cresce 1,8% a.a.' },
-    { id: 'inadimplentes', tema: 'Crédito e famílias', indicador: 'Brasileiros inadimplentes (Serasa Experian)', valor: 83, unidade: 'milhões', periodo: 'maio de 2026', natureza: OBS, pagina: 4, nota: 'Contexto do Novo Desenrola (MP nº 1.355/2026), que já beneficiou mais de 6 milhões de pessoas.' },
+    { id: 'servico_divida', tema: 'Crédito e famílias', indicador: 'Despesas das famílias com serviço da dívida — crescimento real', valor: 10, unidade: '% a.a.', periodo: 'desde setembro de 2024', natureza: OBS, pagina: 6, nota: 'Valor aproximado ("perto de 10% ao ano"). A renda líquida do serviço da dívida ainda cresce 1,8% a.a.', chave: 'servico_divida' },
+    { id: 'inadimplentes', tema: 'Crédito e famílias', indicador: 'Brasileiros inadimplentes (Serasa Experian)', valor: 83, unidade: 'milhões', periodo: 'maio de 2026', natureza: OBS, pagina: 4, nota: 'Contexto do Novo Desenrola (MP nº 1.355/2026), que já beneficiou mais de 6 milhões de pessoas.', chave: 'inadimplencia' },
 
     // Fiscal
     { id: 'primario_2026', tema: 'Fiscal', indicador: 'Resultado primário do setor público — expectativa de mercado', valor: -0.5, unidade: '% do PIB', periodo: '2026', natureza: PROJ, pagina: 6, nota: 'Mediana das expectativas de mercado citada pelo Ipea; para 2027, déficit de 0,4% do PIB.', chave: 'primario', ano: 2026 },
@@ -194,6 +194,88 @@ export const VARIAVEIS = [
     sobe: { cliente: '', vendas: '' }, cai: { cliente: '', vendas: '' } },
 ];
 
+// ---------- Catálogo ampliado ----------
+export const GRUPOS = [
+  { id: 'precos', nome: 'Preços' },
+  { id: 'juros', nome: 'Juros e crédito' },
+  { id: 'atividade', nome: 'Atividade e setores' },
+  { id: 'trabalho', nome: 'Trabalho e renda' },
+  { id: 'externo', nome: 'Setor externo' },
+  { id: 'fiscal', nome: 'Contas públicas' },
+  { id: 'mundo', nome: 'Cenário internacional' },
+];
+const GRUPO_DE = { inflacao: 'precos', igpm: 'precos', juros: 'juros', credito: 'juros', pib: 'atividade', consumo: 'atividade', investimento: 'atividade',
+  desemprego: 'trabalho', renda: 'trabalho', cambio: 'externo', outra: 'outra' };
+VARIAVEIS.forEach(x => { x.grupo = GRUPO_DE[x.id]; });
+
+const nv = (id, nome, grupo, unidade, o = {}) => ({ id, nome, grupo, unidade, focus: null, ipea: null, passo: 0.1, min: -100, max: 1000,
+  sobe: { cliente: '', vendas: '' }, cai: { cliente: '', vendas: '' }, ...o });
+const mec = (sc, sv, cc, cv) => ({ sobe: { cliente: sc, vendas: sv }, cai: { cliente: cc, vendas: cv } });
+const ATIV = mec('Mais receita e confiança no setor; disposição a investir e contratar.', 'Expansão de demanda dos clientes desse setor; pipeline mais robusto.',
+  'Cautela e cortes de orçamento no setor.', 'Queda de volume; foco em retenção e em contas resilientes.');
+
+// Fontes externas: só entram aqui variáveis cuja fonte foi aberta e conferida em 14/11/2026.
+const NOVAS = [
+  nv('precos_adm', 'Preços administrados (energia, combustíveis, tarifas)', 'precos', '%', { focus: 'ipca_adm', ipea: 'ipca_adm', min: 0, max: 15,
+    ...mec('Contas de consumo e transporte mais caras; menos renda livre.', 'Custos operacionais e de frete maiores; pressão sobre margens.', 'Alívio no orçamento de famílias e empresas.', 'Menor pressão de custos logísticos e de energia.') }),
+  nv('alimentos', 'Preços de alimentos', 'precos', '%', { ipea: 'alimentos', min: -5, max: 20,
+    ...mec('Renda das famílias mais comprometida com o básico.', 'Queda de itens discricionários; troca por opções mais baratas.', 'Sobra de renda para outros gastos.', 'Espaço para recuperação de categorias não essenciais.') }),
+  nv('bens_industriais', 'Preços de bens industriais', 'precos', '%', { ipea: 'bens_industriais', min: -5, max: 15 }),
+  nv('precos_servicos', 'Preços de serviços', 'precos', '%', { ipea: 'servicos_precos', min: 0, max: 15 }),
+  nv('petroleo', 'Petróleo (Brent)', 'precos', 'US$', { ipea: 'petroleo', passo: 1, min: 30, max: 160,
+    ...mec('Combustíveis e fretes mais caros; pressão inflacionária.', 'Custos de entrega maiores; reajustes de tabela.', 'Alívio de custos de transporte e energia.', 'Margens logísticas melhores; menos pressão por repasse.') }),
+  nv('combustiveis', 'Preços de combustíveis (gasolina, diesel, etanol)', 'precos', 'R$/litro', { externa: true, passo: 0.05, min: 2, max: 12,
+    fontes: [{ nome: 'ANP — Preços de combustíveis (levantamento semanal)', url: 'https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos' },
+      { nome: 'ANP — Série histórica de preços de combustíveis e de GLP', url: 'https://www.gov.br/anp/pt-br/centrais-de-conteudo/dados-abertos/serie-historica-de-precos-de-combustiveis' }],
+    ...mec('Deslocamento e frete mais caros.', 'Custo de visita, entrega e distribuição maior.', 'Alívio no custo de transporte.', 'Margem logística melhor.') }),
+  nv('commodities', 'Commodities (agrícolas, energia e metais)', 'precos', 'US$', { externa: true, passo: 1, min: 0, max: 5000,
+    fontes: [{ nome: 'Banco Mundial — Commodity Markets ("Pink Sheet", preços mensais)', url: 'https://www.worldbank.org/en/research/commodity-markets' }],
+    ...mec('Insumos mais caros; produtores e exportadores com mais receita.', 'Pressão de custos em quem compra; oportunidade em clientes do agro e da mineração.', 'Alívio de custos de insumos; menor receita de exportadores.', 'Menos pressão por reajuste; cautela em clientes produtores.') }),
+
+  nv('inadimplencia', 'Inadimplência das famílias', 'juros', 'milhões', { ipea: 'inadimplencia', passo: 1, min: 40, max: 120,
+    ...mec('Mais consumidores com restrição de crédito.', 'Queda de vendas a prazo; maior risco de carteira.', 'Mais consumidores aptos a comprar a prazo.', 'Retomada de vendas financiadas.') }),
+  nv('servico_divida', 'Serviço da dívida das famílias', 'juros', '% a.a.', { ipea: 'servico_divida', passo: 0.5, min: -10, max: 30 }),
+  nv('juros_eua', 'Juros dos Estados Unidos (Fed funds)', 'mundo', '% a.a.', { externa: true, passo: 0.25, min: 0, max: 8,
+    fontes: [{ nome: 'Federal Reserve — comunicados do FOMC', url: 'https://www.federalreserve.gov/' }],
+    ...mec('Dólar mais forte e crédito externo mais caro.', 'Pressão sobre câmbio e sobre custos dolarizados.', 'Mais apetite por emergentes; câmbio mais favorável.', 'Alívio em custos importados e em juros domésticos.') }),
+
+  nv('ibc_br', 'Atividade mensal (IBC-Br)', 'atividade', 'índice', { externa: true, passo: 0.1, min: 50, max: 200,
+    fontes: [{ nome: 'Banco Central — IBC-Br (dados abertos, série mensal)', url: 'https://dadosabertos.bcb.gov.br/dataset/24363-indice-de-atividade-economica-do-banco-central---ibc-br' }], ...ATIV }),
+  nv('servicos', 'Serviços', 'atividade', '%', { ipea: 'servicos', min: -10, max: 12, ...ATIV }),
+  nv('industria', 'Indústria', 'atividade', '%', { ipea: 'industria', min: -10, max: 12, ...ATIV }),
+  nv('agro', 'Agropecuária', 'atividade', '%', { ipea: 'agro', min: -10, max: 20, ...ATIV }),
+  nv('varejo', 'Varejo (vendas do comércio)', 'atividade', '%', { ipea: 'varejo', min: -10, max: 12, ...ATIV }),
+  nv('governo', 'Consumo do governo', 'atividade', '%', { ipea: 'governo', min: -5, max: 8 }),
+  nv('confianca_consumidor', 'Confiança do consumidor', 'atividade', 'pontos', { externa: true, passo: 0.5, min: 40, max: 160,
+    fontes: [{ nome: 'FecomercioSP — Pesquisas e indicadores (Índice de Confiança do Consumidor)', url: 'https://pesquisas.fecomercio.com.br' }],
+    ...mec('Mais disposição para comprar e assumir parcelas.', 'Conversão maior; espaço para mix de maior valor.', 'Consumo defensivo; adiamento de compras.', 'Ciclo mais longo; promoções e condições facilitadas.') }),
+  nv('confianca_industria', 'Confiança do empresário industrial (ICEI)', 'atividade', 'pontos', { externa: true, passo: 0.5, min: 20, max: 80,
+    fontes: [{ nome: 'CNI — Confederação Nacional da Indústria (ICEI e Indicadores Industriais)', url: 'https://www.portaldaindustria.com.br/cni/' }],
+    ...mec('Mais projetos aprovados e contratações.', 'Mais oportunidades B2B; decisões mais rápidas.', 'Projetos adiados; orçamentos travados.', 'Ciclos longos; foco em eficiência e redução de custos.') }),
+
+  nv('salario_minimo', 'Salário mínimo', 'trabalho', 'R$', { externa: true, passo: 1, min: 1000, max: 2500,
+    fontes: [{ nome: 'Planalto — Decreto nº 12.797/2025 (valor vigente em 2026)', url: 'https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12797.htm' }],
+    ...mec('Mais renda para famílias de menor renda e beneficiários.', 'Impulso em itens básicos e populares; folha mais cara.', 'Menor ganho de renda na base.', 'Demanda popular mais fraca.') }),
+
+  nv('exportacoes', 'Exportações', 'externo', '%', { ipea: 'exportacoes', min: -15, max: 20,
+    ...mec('Exportadores com mais receita e caixa.', 'Oportunidades em clientes exportadores.', 'Menor receita externa dos clientes.', 'Cautela em setores exportadores.') }),
+  nv('importacoes', 'Importações', 'externo', '%', { ipea: 'importacoes', min: -15, max: 20 }),
+  nv('balanca', 'Balança comercial', 'externo', 'US$ bilhões', { focus: 'balanca', passo: 1, min: -50, max: 150 }),
+  nv('conta_corrente', 'Conta corrente', 'externo', 'US$ bilhões', { focus: 'conta_corrente', passo: 1, min: -150, max: 50 }),
+  nv('idp', 'Investimento direto no país', 'externo', 'US$ bilhões', { focus: 'idp', passo: 1, min: 0, max: 150 }),
+
+  nv('primario', 'Resultado primário (fiscal)', 'fiscal', '% do PIB', { focus: 'primario', ipea: 'primario', min: -5, max: 5,
+    ...mec('Menor risco fiscal; confiança e juros futuros mais baixos.', 'Ambiente de crédito e de investimento mais favorável.', 'Maior risco fiscal; pressão sobre juros e câmbio.', 'Crédito mais caro; clientes mais cautelosos.') }),
+  nv('nominal', 'Resultado nominal', 'fiscal', '% do PIB', { focus: 'nominal', min: -15, max: 5 }),
+  nv('divida', 'Dívida líquida do setor público', 'fiscal', '% do PIB', { focus: 'divida', passo: 0.5, min: 30, max: 110 }),
+
+  nv('pib_mundial', 'Crescimento da economia mundial', 'mundo', '%', { externa: true, min: -5, max: 8,
+    fontes: [{ nome: 'FMI — World Economic Outlook', url: 'https://www.imf.org/en/Publications/WEO' }],
+    ...mec('Mais demanda externa e preços de exportação.', 'Oportunidades em clientes ligados ao comércio exterior.', 'Menor demanda externa; aversão a risco.', 'Cautela de multinacionais e exportadores.') }),
+];
+VARIAVEIS.splice(VARIAVEIS.length - 1, 0, ...NOVAS);
+export const variaveisDoGrupo = g => VARIAVEIS.filter(x => x.grupo === g);
+
 export const FONTES_CONSULTA = [
   { n: '01', nome: 'Banco Central do Brasil (BCB)', desc: 'Selic, câmbio, crédito, juros, atividade econômica e estatísticas monetárias.', url: 'https://www.bcb.gov.br/' },
   { n: '02', nome: 'Relatório Focus — Banco Central', desc: 'Expectativas de mercado para IPCA, PIB, Selic, câmbio e outros indicadores.', url: 'https://www.bcb.gov.br/publicacoes/focus', prioritaria: true },
@@ -240,7 +322,7 @@ export function referenciasPublicadas(varId) {
   }
   if (v.ipea) {
     for (const r of IPEA.registros.filter(x => x.chave === v.ipea)) {
-      out.push({ valor: r.valor, rotulo: `Ipea ${r.ano || ''}`.trim() + (r.ano ? '' : ` · ${r.indicador.split('—')[0].trim()}`), fonte: `Carta de Conjuntura nº 71 (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
+      out.push({ valor: r.valor, rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `Carta de Conjuntura nº 71 (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
     }
   }
   return out;
