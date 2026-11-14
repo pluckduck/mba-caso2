@@ -1,0 +1,516 @@
+// Gerador dos cinco slides. Cada slide é descrito por uma lista de formas e textos posicionados (em polegadas,
+// num quadro 16:9 de 13,333 x 7,5). A mesma descrição alimenta a visualização em HTML e a exportação em PPTX,
+// o que garante que o arquivo exportado corresponda ao que se vê na tela e permaneça editável no PowerPoint.
+import { fonteCss, fontePptx, misturar, luminancia } from './themes.js';
+import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, classificarValor, numSimples, direcao, catalogo } from './modelo.js';
+import { FOCUS, IPEA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
+
+export const W = 13.333, H = 7.5;
+export const TITULOS = [
+  'Empresa e características comerciais',
+  'Indicadores pesquisados no Focus e no Ipea',
+  'Cenários base, favorável e adverso',
+  'Impactos sobre clientes e vendas',
+  'Três decisões comerciais justificadas',
+];
+
+const sobre = cor => (luminancia(cor) > 0.42 ? '#111111' : '#FFFFFF');
+const limpo = s => String(s ?? '').replace(/\s+\n/g, '\n').trim();
+const R = (x, y, w, h, o = {}) => ({ t: 'rect', x, y, w, h, ...o });
+const E = (x, y, w, h, o = {}) => ({ t: 'ellipse', x, y, w, h, ...o });
+const LN = (x, y, w, h, o = {}) => ({ t: 'line', x, y, w, h, ...o });
+const P = (text, o = {}) => ({ text: String(text ?? ''), ...o });
+const TX = (x, y, w, h, paras, o = {}) => ({
+  t: 'text', x, y, w, h,
+  paras: (Array.isArray(paras) ? paras : [paras]).map(p => (typeof p === 'string' ? P(p) : p)).filter(p => p.text.trim() !== ''),
+  max: 12, min: 8, fonte: 'corpo', align: 'left', valign: 'top', ...o,
+});
+
+// ---------- Ajuste de texto (medição real no navegador) ----------
+let medidor = null;
+const cacheAjuste = new Map();
+
+function parasHTML(paras, pt, k) {
+  return paras.map((p, i) => {
+    const px = (pt * (p.k || 1) / 72) * k;
+    const gap = i < paras.length - 1 ? (pt * 0.32 / 72) * k : 0;
+    const st = [`font-size:${px.toFixed(2)}px`, `margin:0 0 ${gap.toFixed(2)}px 0`];
+    if (p.bold) st.push('font-weight:700');
+    if (p.italic) st.push('font-style:italic');
+    if (p.color) st.push(`color:${p.color}`);
+    if (p.align) st.push(`text-align:${p.align}`);
+    if (p.bullet) st.push('padding-left:1em', 'text-indent:-1em');
+    const esc = p.text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    return `<p style="${st.join(';')}">${p.bullet ? '•&nbsp;' : ''}${esc}</p>`;
+  }).join('');
+}
+
+function altura(paras, wIn, pt, css) {
+  if (!medidor) {
+    medidor = document.createElement('div');
+    medidor.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden;line-height:1.2;white-space:pre-wrap;overflow-wrap:break-word;';
+    document.body.appendChild(medidor);
+  }
+  medidor.style.width = `${wIn * 96 * 0.965}px`;
+  medidor.style.fontFamily = css;
+  medidor.innerHTML = parasHTML(paras, pt, 96);
+  return medidor.offsetHeight / 96;
+}
+
+function ajustar(el, tema) {
+  const css = fonteCss(tema.fontes[el.fonte]);
+  const chave = JSON.stringify([el.paras, el.w, el.h, el.max, el.min, css, el.bold]);
+  if (cacheAjuste.has(chave)) return cacheAjuste.get(chave);
+  const paras = el.bold ? el.paras.map(p => ({ ...p, bold: true })) : el.paras;
+  let pt = el.max, r = null;
+  if (!paras.length) r = { size: el.max, paras, cortado: false };
+  while (!r) {
+    if (altura(paras, el.w, pt, css) <= el.h + 0.01) { r = { size: pt, paras, cortado: false }; break; }
+    if (pt - 0.5 < el.min) break;
+    pt -= 0.5;
+  }
+  if (!r) {
+    // No tamanho mínimo o texto ainda não cabe: corta ao final e sinaliza para o autor resumir.
+    const copia = paras.map(p => ({ ...p }));
+    let guarda = 0;
+    while (copia.length && altura(copia, el.w, el.min, css) > el.h + 0.01 && guarda++ < 400) {
+      const u = copia[copia.length - 1];
+      const palavras = u.text.replace(/…$/, '').trim().split(/\s+/);
+      if (palavras.length <= 3) { if (copia.length > 1) copia.pop(); else { u.text = palavras.slice(0, 1).join(' ') + '…'; break; } continue; }
+      u.text = palavras.slice(0, Math.max(3, Math.floor(palavras.length * 0.9))).join(' ').replace(/[,;:.\s]+$/, '') + '…';
+    }
+    r = { size: el.min, paras: copia, cortado: true };
+  }
+  if (cacheAjuste.size > 4000) cacheAjuste.clear();
+  cacheAjuste.set(chave, r);
+  return r;
+}
+
+// ---------- Blocos de texto com possibilidade de edição específica para o slide ----------
+function criarContexto(caso, tema) {
+  const blocos = [];
+  const c = tema.cores;
+  const txt = (slide, key, rotulo, padrao) => {
+    const original = limpo(padrao);
+    const editado = caso.slides.textos[key];
+    blocos.push({ slide, key, rotulo, padrao: original, editado: typeof editado === 'string' });
+    return typeof editado === 'string' ? limpo(editado) : original;
+  };
+  const raio = Math.min(0.3, (tema.el.raio || 0) / 90);
+  const tom = misturar(c.superficie, c.primaria, luminancia(c.fundo) < 0.35 ? 0.16 : 0.07);
+  const cartao = (x, y, w, h, o = {}) => {
+    const base = { r: raio, ...o };
+    if (tema.el.cartao === 'preenchido') return R(x, y, w, h, { fill: o.fill || (c.superficie.toUpperCase() === c.fundo.toUpperCase() ? tom : c.superficie), ...base });
+    if (tema.el.cartao === 'sombra') return R(x, y, w, h, { fill: o.fill || c.superficie, sombra: true, ...base });
+    return R(x, y, w, h, { fill: o.fill || c.superficie, line: c.borda, lw: 0.75, ...base });
+  };
+  const rotulo = (x, y, w, texto, cor = c.destaque) => TX(x, y, w, 0.24, P(texto.toUpperCase(), { bold: true }), { max: 9, min: 7, color: cor, valign: 'middle' });
+  return { caso, tema, c, txt, blocos, raio, tom, cartao, rotulo };
+}
+
+function moldura(ctx, n, fontes) {
+  const { tema, c, caso } = ctx;
+  const el = tema.el;
+  const lateral = el.cabecalho === 'lateral';
+  const X0 = lateral ? 0.78 : 0.6, X1 = W - 0.6;
+  const els = [R(0, 0, W, H, { fill: c.fundo })];
+
+  if (el.deco === 'canto') { els.push(R(W - 1.7, 0, 1.7, 0.16, { fill: c.destaque }), R(W - 0.16, 0, 0.16, 1.7, { fill: c.destaque })); }
+  if (el.deco === 'circulos') { els.push(E(W - 1.55, -1.0, 2.5, 2.5, { fill: c.primaria, alpha: 0.13 }), E(W - 2.45, 0.35, 1.0, 1.0, { fill: c.destaque, alpha: 0.2 })); }
+  if (el.deco === 'grade') { for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) els.push(E(W - 1.55 + i * 0.2, 0.28 + j * 0.2, 0.06, 0.06, { fill: c.suave, alpha: 0.55 })); }
+
+  const titulo = el.caixaAlta ? TITULOS[n - 1].toUpperCase() : TITULOS[n - 1];
+  const kicker = `ESTUDO DE CASO 2 · CENÁRIOS ECONÔMICOS E ESTRATÉGIAS DE VENDAS`;
+  const larguraTitulo = X1 - X0 - (el.deco === 'nenhum' || el.deco === 'barra' ? 0 : 1.9);
+  if (el.cabecalho === 'faixa') {
+    els.splice(1, 0, R(0, 0, W, 1.22, { fill: c.primaria }));
+    els.push(TX(X0, 0.2, larguraTitulo, 0.24, P(kicker, { bold: true }), { max: 9, min: 7, color: misturar(c.sobrePrimaria, c.primaria, 0.25), valign: 'middle' }));
+    els.push(TX(X0, 0.44, larguraTitulo, 0.66, titulo, { max: 26, min: 15, fonte: 'titulo', color: c.sobrePrimaria, bold: true, valign: 'middle' }));
+  } else {
+    if (lateral) els.push(R(0, 0, 0.3, H, { fill: c.primaria }));
+    if (el.deco === 'barra') els.push(R(X0, 0.2, 0.9, 0.08, { fill: c.destaque }));
+    els.push(TX(X0, 0.32, larguraTitulo, 0.24, P(kicker, { bold: true }), { max: 9, min: 7, color: c.suave, valign: 'middle' }));
+    els.push(TX(X0, 0.55, larguraTitulo, 0.66, titulo, { max: el.cabecalho === 'limpo' ? 30 : 26, min: 15, fonte: 'titulo', color: el.cabecalho === 'limpo' ? c.texto : c.primaria, bold: true, valign: 'middle' }));
+    if (el.cabecalho === 'linha') els.push(LN(X0, 1.27, X1 - X0, 0, { color: c.destaque, lw: 1.75 }));
+  }
+
+  let Y1 = 7.12;
+  if (el.rodape) {
+    Y1 = 6.74;
+    els.push(LN(X0, 6.88, X1 - X0, 0, { color: c.borda, lw: 0.75 }));
+    const esquerda = el.fontes && fontes ? `Fontes: ${fontes}` : 'MBA Gestão Comercial e SalesTech';
+    els.push(TX(X0, 6.93, X1 - X0 - 3.3, 0.4, esquerda, { max: 8.5, min: 6.5, color: c.suave, valign: 'middle' }));
+    const direita = [limpo(caso.ident.empresa), el.numeracao ? `${n}/5` : ''].filter(Boolean).join('  ·  ');
+    els.push(TX(X1 - 3.2, 6.93, 3.2, 0.4, direita, { max: 9, min: 7, color: c.suave, align: 'right', valign: 'middle' }));
+  } else if (el.numeracao) {
+    els.push(TX(X1 - 1, 7.08, 1, 0.3, `${n}/5`, { max: 9, min: 7, color: c.suave, align: 'right', valign: 'middle' }));
+  }
+  return { els, X0, X1, Y0: 1.5, Y1 };
+}
+
+const FONTE_FOCUS = () => `Focus – Relatório de Mercado (BCB), ${FOCUS.dataTxt}`;
+const FONTE_IPEA = () => `Carta de Conjuntura nº 71 (Ipea), ${IPEA.periodo}`;
+
+// ---------- Slide 1: empresa ----------
+function slide1(ctx) {
+  const { caso, c, txt, cartao, rotulo } = ctx;
+  const m = moldura(ctx, 1, 'elaboração do autor a partir do diagnóstico da empresa.');
+  const { els, X0, X1, Y0, Y1 } = m;
+  const hA = Y1 - Y0, wE = 4.05, gap = 0.22;
+  const cp = sobre(c.primaria) === '#FFFFFF' && luminancia(c.sobrePrimaria) > 0.5 ? c.sobrePrimaria : sobre(c.primaria);
+  els.push(R(X0, Y0, wE, hA, { fill: c.primaria, r: ctx.raio }));
+  els.push(TX(X0 + 0.28, Y0 + 0.24, wE - 0.56, 0.24, P('EMPRESA ANALISADA', { bold: true }), { max: 9, min: 7, color: misturar(cp, c.primaria, 0.25), valign: 'middle' }));
+  els.push(TX(X0 + 0.28, Y0 + 0.52, wE - 0.56, 1.15, txt(1, 's1.empresa', 'Empresa', caso.ident.empresa || 'Nome da empresa'), { max: 30, min: 15, fonte: 'titulo', color: cp, bold: true }));
+  const meta = [P(`Autor: ${limpo(caso.ident.aluno) || '—'}`), P(`Horizonte dos cenários: ${horizonteTxt(caso.ident)}`)];
+  els.push(TX(X0 + 0.28, Y0 + 1.75, wE - 0.56, 0.62, meta, { max: 11, min: 8, color: cp }));
+
+  const vars = variaveisAtivas(caso).slice(0, 5);
+  const yB = Y0 + 2.55;
+  els.push(LN(X0 + 0.28, yB - 0.1, wE - 0.56, 0, { color: misturar(cp, c.primaria, 0.55), lw: 0.75 }));
+  els.push(TX(X0 + 0.28, yB, wE - 0.56, 0.24, P('SENSIBILIDADE ÀS VARIÁVEIS', { bold: true }), { max: 9, min: 7, color: misturar(cp, c.primaria, 0.25), valign: 'middle' }));
+  const espaco = Y1 - 0.25 - (yB + 0.34);
+  const passo = Math.min(0.5, espaco / Math.max(vars.length, 1));
+  const niveis = ['', 'baixa', 'média', 'alta'];
+  vars.forEach((v, i) => {
+    const y = yB + 0.34 + i * passo;
+    const s = Math.max(1, Math.min(3, Number(v.sensibilidade) || 2));
+    els.push(TX(X0 + 0.28, y, wE - 0.56, passo * 0.5, `${v.nome} — ${niveis[s]}`, { max: 10, min: 7, color: cp, valign: 'middle' }));
+    const wT = wE - 0.56, yT = y + passo * 0.56, hT = Math.min(0.1, passo * 0.2);
+    els.push(R(X0 + 0.28, yT, wT, hT, { fill: misturar(c.primaria, cp, 0.22), r: hT / 2 }));
+    els.push(R(X0 + 0.28, yT, wT * (s / 3), hT, { fill: cp, r: hT / 2 }));
+  });
+  if (!vars.length) els.push(TX(X0 + 0.28, yB + 0.34, wE - 0.56, 0.6, 'Selecione as variáveis na etapa 2.', { max: 10, min: 8, color: cp, italic: true }));
+
+  const xD = X0 + wE + gap, wD = X1 - xD, wC = (wD - gap) / 2, hC = (hA - gap) / 2;
+  const cards = [
+    ['s1.setor', 'Setor e portfólio', caso.diag.setor],
+    ['s1.clientes', 'Perfil dos clientes', caso.diag.clientes],
+    ['s1.mercado', 'Dinâmica do mercado', caso.diag.mercado],
+    ['s1.exposicao', 'Exposição macroeconômica', caso.diag.exposicao],
+  ];
+  cards.forEach(([key, rot, valor], i) => {
+    const x = xD + (i % 2) * (wC + gap), y = Y0 + Math.floor(i / 2) * (hC + gap);
+    els.push(cartao(x, y, wC, hC));
+    els.push(rotulo(x + 0.2, y + 0.16, wC - 0.4, rot));
+    els.push(TX(x + 0.2, y + 0.46, wC - 0.4, hC - 0.62, txt(1, key, rot, valor), { max: 13, min: 8, color: c.texto }));
+  });
+  return els;
+}
+
+// ---------- Slide 2: indicadores ----------
+function slide2(ctx) {
+  const { caso, c, txt, cartao, rotulo, tom } = ctx;
+  const m = moldura(ctx, 2, `${FONTE_FOCUS()}; ${FONTE_IPEA()}.`);
+  const { els, X0, X1, Y0, Y1 } = m;
+  const vars = variaveisAtivas(caso).slice(0, 5);
+  const wT = X1 - X0, hStrip = 1.12, gap = 0.16, hCab = 0.4;
+  const prop = [0.16, 0.15, 0.24, 0.225, 0.225];
+  const xs = prop.reduce((a, p, i) => { a.push(i === 0 ? X0 : a[i - 1] + prop[i - 1] * wT); return a; }, []);
+  const cab = ['Variável', 'Dado ou projeção', 'Natureza, fonte e período', 'Tendência', 'Implicação para a empresa'];
+  els.push(R(X0, Y0, wT, hCab, { fill: c.primaria, r: ctx.raio * 0.5 }));
+  cab.forEach((t, i) => els.push(TX(xs[i] + 0.1, Y0, prop[i] * wT - 0.2, hCab, P(t, { bold: true }), { max: 10.5, min: 8, color: c.sobrePrimaria, valign: 'middle' })));
+  const n = Math.max(vars.length, 1);
+  const hRow = Math.min(1.25, (Y1 - Y0 - hCab - hStrip - gap) / n);
+  vars.forEach((v, i) => {
+    const y = Y0 + hCab + i * hRow;
+    if (i % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
+    els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
+    const cel = (j, paras, o = {}) => els.push(TX(xs[j] + 0.1, y + 0.07, prop[j] * wT - 0.2, hRow - 0.14, paras, { max: 10.5, min: 7, color: c.texto, valign: 'middle', ...o }));
+    cel(0, P(txt(2, `s2.nome.${v.uid}`, `Variável ${i + 1}: nome`, v.nome), { bold: true }), { max: 12 });
+    cel(1, P(txt(2, `s2.dado.${v.uid}`, `Variável ${i + 1}: dado ou projeção`, v.dado), { bold: true }), { max: 13, color: c.primaria });
+    cel(2, [P(limpo(v.natureza) || 'Natureza não informada', { bold: true, color: v.natureza === 'Hipótese do autor' ? c.destaque : c.texto }),
+      P(txt(2, `s2.fonte.${v.uid}`, `Variável ${i + 1}: fonte`, v.fonte)),
+      P([v.publicacao && `Publicação: ${limpo(v.publicacao)}`, v.periodo && `Período: ${limpo(v.periodo)}`].filter(Boolean).join(' · '), { color: c.suave })], { max: 9.5 });
+    cel(3, txt(2, `s2.tendencia.${v.uid}`, `Variável ${i + 1}: tendência`, v.tendencia));
+    cel(4, txt(2, `s2.implicacao.${v.uid}`, `Variável ${i + 1}: implicação`, v.implicacao));
+  });
+  if (!vars.length) els.push(TX(X0, Y0 + hCab + 0.2, wT, 0.5, 'Registre ao menos três variáveis na etapa 2.', { max: 12, color: c.suave, italic: true }));
+
+  const yS = Y1 - hStrip, wS = (wT - gap) / 2;
+  const consultas = [
+    ['s2.focus', `Relatório Focus${caso.consultas.focusData ? ` — ${limpo(caso.consultas.focusData)}` : ''}`, caso.consultas.focusTexto],
+    ['s2.ipea', `Ipea — ${limpo(caso.consultas.ipeaTitulo) || 'Carta de Conjuntura'}`, caso.consultas.ipeaTexto],
+  ];
+  consultas.forEach(([key, rot, valor], i) => {
+    const x = X0 + i * (wS + gap);
+    els.push(cartao(x, yS, wS, hStrip));
+    els.push(R(x, yS, 0.07, hStrip, { fill: c.destaque }));
+    els.push(TX(x + 0.22, yS + 0.1, wS - 0.4, 0.26, P(rot, { bold: true }), { max: 10, min: 7.5, color: c.primaria, valign: 'middle' }));
+    els.push(TX(x + 0.22, yS + 0.38, wS - 0.4, hStrip - 0.48, txt(2, key, rot, valor), { max: 10.5, min: 7, color: c.texto }));
+  });
+  return els;
+}
+
+// ---------- Slide 3: cenários ----------
+function slide3(ctx) {
+  const { caso, c, txt, cartao, rotulo } = ctx;
+  const m = moldura(ctx, 3, `${FONTE_FOCUS()}; ${FONTE_IPEA()}; hipóteses do autor. P = valor publicado nas fontes; H = hipótese do autor.`);
+  const { els, X0, X1, Y0, Y1 } = m;
+  const vars = variaveisAtivas(caso).slice(0, 4);
+  const gap = 0.2, hG = 1.3, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0 - hG - gap;
+  CENARIOS.forEach((s, i) => {
+    const cen = caso.cenarios[s.id], cor = c[s.id], x = X0 + i * (wC + gap);
+    els.push(cartao(x, Y0, wC, hC));
+    els.push(R(x, Y0, wC, 0.46, { fill: cor, r: ctx.raio }));
+    if (ctx.raio > 0) els.push(R(x, Y0 + 0.23, wC, 0.23, { fill: cor }));
+    els.push(TX(x + 0.2, Y0, wC - 0.4, 0.46, P(s.nome, { bold: true }), { max: 14, min: 10, fonte: 'titulo', color: sobre(cor), valign: 'middle' }));
+    let y = Y0 + 0.56;
+    els.push(rotulo(x + 0.2, y, wC - 0.4, 'Premissas', c.suave));
+    els.push(TX(x + 0.2, y + 0.26, wC - 0.4, 0.92, txt(3, `s3.premissas.${s.id}`, `${s.nome}: premissas`, cen.premissas), { max: 11, min: 7.5, color: c.texto }));
+    y += 1.26;
+    const hLinha = Math.min(0.3, 1.1 / Math.max(vars.length, 1));
+    vars.forEach((v, j) => {
+      const yy = y + j * hLinha, t = cen.traj[v.uid] || {};
+      const cls = classificarValor(referenciasPublicadas(v.tipo), t.valor);
+      const n = numSimples(t.valor);
+      els.push(LN(x + 0.2, yy, wC - 0.4, 0, { color: c.borda, lw: 0.5 }));
+      els.push(TX(x + 0.2, yy, wC - 2.0, hLinha, v.nome, { max: 10, min: 7, color: c.texto, valign: 'middle' }));
+      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls ? `  (${cls.tipo})` : ''}`;
+      els.push(TX(x + wC - 1.85, yy, 1.65, hLinha, P(valor, { bold: true }), { max: 10.5, min: 7, color: cor === c.fundo ? c.texto : (luminancia(c.superficie) < 0.35 ? cor : misturar(cor, c.texto, 0.25)), align: 'right', valign: 'middle' }));
+    });
+    y += Math.max(vars.length, 1) * hLinha + 0.08;
+    const resto = Y0 + hC - 0.14 - y;
+    if (resto > 0.45) {
+      els.push(rotulo(x + 0.2, y, wC - 0.4, 'Fundamentação', c.suave));
+      const just = vars.map(v => { const j = limpo(cen.traj[v.uid]?.justificativa); return j ? `${v.nome}: ${j}` : ''; }).filter(Boolean).join(' ');
+      const padrao = limpo(cen.hipoteses) ? `Hipóteses do autor: ${limpo(cen.hipoteses)}` : just;
+      els.push(TX(x + 0.2, y + 0.25, wC - 0.4, resto - 0.25, txt(3, `s3.fund.${s.id}`, `${s.nome}: fundamentação`, padrao), { max: 9.5, min: 7, color: c.texto }));
+    }
+  });
+
+  // Gráfico comparativo: uma pequena série de barras por variável.
+  const yG = Y1 - hG;
+  els.push(cartao(X0, yG, X1 - X0, hG));
+  if (vars.length) {
+    const wV = (X1 - X0 - 0.3) / vars.length;
+    vars.forEach((v, j) => {
+      const x = X0 + 0.15 + j * wV;
+      const vals = CENARIOS.map(s => numSimples(caso.cenarios[s.id].traj[v.uid]?.valor));
+      const validos = vals.filter(n => n !== null);
+      const hi = Math.max(...validos, 0), lo = Math.min(...validos, 0);
+      els.push(TX(x + 0.08, yG + 0.08, wV - 0.16, 0.24, P(`${v.nome}${v.unidade ? ` (${v.unidade})` : ''}`, { bold: true }), { max: 9, min: 6.5, color: c.suave, valign: 'middle' }));
+      CENARIOS.forEach((s, k) => {
+        const yy = yG + 0.38 + k * 0.28, n = vals[k];
+        els.push(TX(x + 0.08, yy, 0.82, 0.24, s.curto, { max: 8.5, min: 6.5, color: c.texto, valign: 'middle' }));
+        const wMax = wV - 0.16 - 0.86 - 0.72;
+        const frac = n === null || hi === lo ? 0 : (n - lo) / (hi - lo);
+        els.push(R(x + 0.92, yy + 0.05, wMax, 0.14, { fill: ctx.tom, r: 0.03 }));
+        if (frac > 0) els.push(R(x + 0.92, yy + 0.05, Math.max(0.03, wMax * frac), 0.14, { fill: c[s.id], r: 0.03 }));
+        els.push(TX(x + 0.92 + wMax + 0.06, yy, 0.66, 0.24, P(n === null ? '—' : fmt(n, 2), { bold: true }), { max: 9, min: 6.5, color: c.texto, valign: 'middle' }));
+      });
+    });
+  } else {
+    els.push(TX(X0 + 0.2, yG + 0.2, X1 - X0 - 0.4, 0.5, 'Defina as trajetórias das variáveis na etapa 3.', { max: 11, color: c.suave, italic: true }));
+  }
+  return els;
+}
+
+const SETA = { sobe: '↑', cai: '↓', estavel: '→' };
+
+// ---------- Slide 4: impactos ----------
+function slide4(ctx) {
+  const { caso, c, txt, cartao, rotulo, tom } = ctx;
+  const m = moldura(ctx, 4, `elaboração do autor com base em ${FONTE_FOCUS()} e ${FONTE_IPEA()}.`);
+  const { els, X0, X1, Y0, Y1 } = m;
+  const wT = X1 - X0, w0 = 2.05, wC = (wT - w0) / 3, hCab = 0.4, hS = 1.18, gap = 0.16;
+  const hRow = (Y1 - Y0 - hCab - hS - gap) / DIMENSOES.length;
+  els.push(R(X0, Y0, w0, hCab, { fill: c.primaria }));
+  els.push(TX(X0 + 0.1, Y0, w0 - 0.2, hCab, P('Dimensão comercial', { bold: true }), { max: 10.5, min: 8, color: c.sobrePrimaria, valign: 'middle' }));
+  CENARIOS.forEach((s, i) => {
+    const x = X0 + w0 + i * wC;
+    els.push(R(x, Y0, wC, hCab, { fill: c[s.id] }));
+    els.push(TX(x + 0.1, Y0, wC - 0.2, hCab, P(s.nome, { bold: true }), { max: 10.5, min: 8, color: sobre(c[s.id]), valign: 'middle' }));
+  });
+  DIMENSOES.forEach((d, r) => {
+    const y = Y0 + hCab + r * hRow;
+    if (r % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
+    els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
+    els.push(TX(X0 + 0.1, y + 0.05, w0 - 0.2, hRow - 0.1, P(d.curto, { bold: true }), { max: 10.5, min: 8, color: c.primaria, valign: 'middle' }));
+    CENARIOS.forEach((s, i) => {
+      els.push(TX(X0 + w0 + i * wC + 0.1, y + 0.05, wC - 0.2, hRow - 0.1, txt(4, `s4.${d.id}.${s.id}`, `${d.curto} — ${s.curto}`, caso.impactos[s.id][d.id]), { max: 10, min: 6.5, color: c.texto, valign: 'middle' }));
+    });
+  });
+
+  const sim = simular(caso);
+  const yS = Y1 - hS, wSim = sim.temDados ? 3.9 : 0, wCad = wT - wSim - (wSim ? gap : 0);
+  els.push(cartao(X0, yS, wCad, hS));
+  els.push(R(X0, yS, 0.07, hS, { fill: c.destaque }));
+  els.push(rotulo(X0 + 0.22, yS + 0.08, wCad - 0.4, 'Cadeia de causa e efeito no cenário base: variável → cliente → vendas', c.primaria));
+  const vars = variaveisAtivas(caso).slice(0, 3);
+  const cadeia = vars.map(v => {
+    const k = caso.impactos.base.cadeias[v.uid] || {};
+    if (!limpo(k.cliente) && !limpo(k.vendas)) return '';
+    const d = direcao(caso.cenarios.base.traj[v.uid]?.valor, v.valorNum);
+    return `${v.nome}${d ? ' ' + SETA[d] : ''} → ${limpo(k.cliente) || '…'} → ${limpo(k.vendas) || '…'}`;
+  }).filter(Boolean).join('\n');
+  const tCad = txt(4, 's4.cadeia', 'Cadeia de causa e efeito', cadeia);
+  els.push(TX(X0 + 0.22, yS + 0.36, wCad - 0.4, hS - 0.46, tCad.split('\n').map(l => P(l, { bullet: true })), { max: 10, min: 6.5, color: c.texto }));
+  if (wSim) {
+    const x = X0 + wCad + gap;
+    els.push(cartao(x, yS, wSim, hS));
+    els.push(rotulo(x + 0.18, yS + 0.08, wSim - 0.36, 'Receita estimada ante o cenário base (hipótese do autor)', c.primaria));
+    const alvo = ['favoravel', 'adverso'], maxAbs = Math.max(...alvo.map(k => Math.abs(sim[k].delta)), 0.0001);
+    alvo.forEach((k, i) => {
+      const yy = yS + 0.42 + i * 0.34, dlt = sim[k].delta, wMax = wSim - 0.36 - 0.9 - 0.85;
+      els.push(TX(x + 0.18, yy, 0.9, 0.26, CENARIOS.find(s => s.id === k).curto, { max: 9.5, min: 7, color: c.texto, valign: 'middle' }));
+      els.push(R(x + 1.08, yy + 0.06, wMax, 0.14, { fill: tom, r: 0.03 }));
+      els.push(R(x + 1.08, yy + 0.06, Math.max(0.03, wMax * Math.abs(dlt) / maxAbs), 0.14, { fill: c[k], r: 0.03 }));
+      els.push(TX(x + 1.08 + wMax + 0.06, yy, 0.8, 0.26, P(`${dlt > 0 ? '+' : ''}${fmt(dlt, 1)}%`, { bold: true }), { max: 10, min: 7, color: c.texto, valign: 'middle' }));
+    });
+  }
+  return els;
+}
+
+// ---------- Slide 5: decisões ----------
+function slide5(ctx) {
+  const { caso, c, txt, cartao, rotulo } = ctx;
+  const m = moldura(ctx, 5, `elaboração do autor com base em ${FONTE_FOCUS()} e ${FONTE_IPEA()}.`);
+  const { els, X0, X1, Y0, Y1 } = m;
+  const gap = 0.2, hS = 1.12, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0 - hS - 0.16;
+  const dec = caso.decisoes.slice(0, 3);
+  while (dec.length < 3) dec.push({ uid: `vazio${dec.length}`, acao: '', evidencia: '', risco: '', contribuicao: '' });
+  dec.forEach((d, i) => {
+    const x = X0 + i * (wC + gap);
+    els.push(cartao(x, Y0, wC, hC));
+    els.push(E(x + 0.2, Y0 + 0.2, 0.5, 0.5, { fill: c.primaria }));
+    els.push(TX(x + 0.2, Y0 + 0.2, 0.5, 0.5, P(String(i + 1), { bold: true }), { max: 16, min: 12, fonte: 'titulo', color: c.sobrePrimaria, align: 'center', valign: 'middle' }));
+    els.push(TX(x + 0.82, Y0 + 0.14, wC - 1.02, 0.86, P(txt(5, `s5.acao.${d.uid}`, `Decisão ${i + 1}: ação comercial`, d.acao), { bold: true }), { max: 13, min: 8.5, fonte: 'titulo', color: c.texto, valign: 'middle' }));
+    els.push(LN(x + 0.2, Y0 + 1.08, wC - 0.4, 0, { color: c.borda, lw: 0.5 }));
+    const blocos = [['evidencia', 'Indicador, evidência e impacto'], ['risco', 'Risco mitigado ou oportunidade'], ['contribuicao', 'Contribuição para vendas e rentabilidade']];
+    const hB = (hC - 1.16 - 0.1) / 3;
+    blocos.forEach(([campo, rot], j) => {
+      const y = Y0 + 1.16 + j * hB;
+      els.push(rotulo(x + 0.2, y, wC - 0.4, rot));
+      els.push(TX(x + 0.2, y + 0.24, wC - 0.4, hB - 0.3, txt(5, `s5.${campo}.${d.uid}`, `Decisão ${i + 1}: ${rot.toLowerCase()}`, d[campo]), { max: 10.5, min: 7, color: c.texto }));
+    });
+  });
+  const yS = Y1 - hS;
+  els.push(R(X0, yS, X1 - X0, hS, { fill: c.primaria, r: ctx.raio }));
+  els.push(TX(X0 + 0.25, yS + 0.1, X1 - X0 - 0.5, 0.24, P('SÍNTESE EXECUTIVA', { bold: true }), { max: 9, min: 7, color: misturar(c.sobrePrimaria, c.primaria, 0.2), valign: 'middle' }));
+  els.push(TX(X0 + 0.25, yS + 0.36, X1 - X0 - 0.5, hS - 0.46, txt(5, 's5.sintese', 'Síntese executiva', caso.sintese), { max: 12, min: 7.5, color: c.sobrePrimaria }));
+  return els;
+}
+
+// Constrói os cinco slides já com o tamanho de fonte ajustado, além da lista de blocos editáveis e alertas.
+export function construir(caso, tema) {
+  const ctx = criarContexto(caso, tema);
+  const slides = [slide1, slide2, slide3, slide4, slide5].map(f => f(ctx));
+  const alertas = [];
+  slides.forEach((els, i) => {
+    let menor = 99, cortes = 0;
+    for (const el of els) {
+      if (el.t !== 'text') continue;
+      const r = ajustar(el, tema);
+      el.size = r.size; el.fit = r.paras; el.cortado = r.cortado;
+      if (el.paras.length && el.max >= 10) menor = Math.min(menor, r.size);
+      if (r.cortado) cortes++;
+    }
+    if (cortes) alertas.push({ slide: i + 1, tipo: 'corte', texto: `Slide ${i + 1}: ${cortes} bloco(s) de texto não coube(ram) e foi(ram) cortado(s). Resuma o texto do slide.` });
+    else if (menor < 8.5) alertas.push({ slide: i + 1, tipo: 'fonte', texto: `Slide ${i + 1}: há texto em corpo ${fmt(menor, 1)} pt, difícil de ler em projeção. Considere resumir.` });
+  });
+  return { slides, blocos: ctx.blocos, alertas };
+}
+
+// ---------- Renderização em HTML ----------
+export function renderHTML(els, tema, px = 1280) {
+  const k = px / W;
+  const raiz = document.createElement('div');
+  raiz.className = 'slide';
+  raiz.style.cssText = `width:${px}px;height:${(px * H) / W}px;position:relative;overflow:hidden;line-height:1.2;`;
+  const partes = [];
+  for (const el of els) {
+    const pos = `position:absolute;left:${(el.x * k).toFixed(2)}px;top:${(el.y * k).toFixed(2)}px;width:${(el.w * k).toFixed(2)}px;`;
+    if (el.t === 'rect' || el.t === 'ellipse') {
+      const st = [pos, `height:${(el.h * k).toFixed(2)}px`, 'box-sizing:border-box'];
+      if (el.fill) st.push(`background:${el.fill}`);
+      if (el.line) st.push(`border:${Math.max(1, (el.lw || 0.75) / 72 * k).toFixed(2)}px solid ${el.line}`);
+      if (el.t === 'ellipse') st.push('border-radius:50%'); else if (el.r) st.push(`border-radius:${(el.r * k).toFixed(2)}px`);
+      if (el.alpha !== undefined) st.push(`opacity:${el.alpha}`);
+      if (el.sombra) st.push('box-shadow:0 2px 10px rgba(0,0,0,.16)');
+      partes.push(`<div style="${st.join(';')}"></div>`);
+    } else if (el.t === 'line') {
+      const esp = Math.max(1, (el.lw || 0.75) / 72 * k);
+      partes.push(`<div style="${pos}height:${esp.toFixed(2)}px;background:${el.color};margin-top:${(-esp / 2).toFixed(2)}px"></div>`);
+    } else if (el.t === 'text') {
+      const jus = { top: 'flex-start', middle: 'center', bottom: 'flex-end' }[el.valign];
+      const st = [pos, `height:${(el.h * k).toFixed(2)}px`, 'display:flex', 'flex-direction:column', `justify-content:${jus}`, `color:${el.color || tema.cores.texto}`,
+        `font-family:${fonteCss(tema.fontes[el.fonte])}`, `text-align:${el.align}`, 'white-space:pre-wrap', 'overflow-wrap:break-word', 'overflow:hidden'];
+      if (el.italic) st.push('font-style:italic');
+      partes.push(`<div style="${st.join(';').replace(/"/g, '&quot;')}"><div>${parasHTML(el.fit || el.paras, el.size || el.max, k)}</div></div>`);
+    }
+  }
+  raiz.innerHTML = partes.join('');
+  return raiz;
+}
+
+// ---------- Exportação em PPTX (PptxGenJS, carregado sob demanda) ----------
+const hx = c => String(c).replace('#', '').toUpperCase();
+
+function carregarPptx() {
+  if (window.PptxGenJS) return Promise.resolve();
+  return new Promise((ok, erro) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/pptxgen.bundle.js';
+    s.onload = ok; s.onerror = () => erro(new Error('Não foi possível carregar o gerador de PPTX.'));
+    document.head.appendChild(s);
+  });
+}
+
+export async function exportarPptx(caso, tema, notas = []) {
+  await carregarPptx();
+  const { slides } = construir(caso, tema);
+  const pptx = new window.PptxGenJS();
+  pptx.defineLayout({ name: 'CASO2', width: W, height: H });
+  pptx.layout = 'CASO2';
+  pptx.title = `Estudo de Caso 2 — ${caso.ident.empresa || 'Cenários econômicos e estratégias de vendas'}`;
+  pptx.author = caso.ident.aluno || '';
+  pptx.subject = 'MBA Gestão Comercial e SalesTech — Cenários Econômicos em Vendas';
+  slides.forEach((els, i) => {
+    const sl = pptx.addSlide();
+    for (const el of els) {
+      const g = { x: el.x, y: el.y, w: el.w, h: el.h };
+      if (el.t === 'rect' || el.t === 'ellipse') {
+        if (el.x === 0 && el.y === 0 && el.w === W && el.h === H) { sl.background = { color: hx(el.fill) }; continue; }
+        const o = { ...g };
+        o.fill = el.fill ? { color: hx(el.fill), transparency: el.alpha !== undefined ? Math.round((1 - el.alpha) * 100) : 0 } : { type: 'none' };
+        o.line = el.line ? { color: hx(el.line), width: el.lw || 0.75 } : { type: 'none' };
+        if (el.sombra) o.shadow = { type: 'outer', color: '000000', opacity: 0.18, blur: 8, offset: 2, angle: 90 };
+        if (el.t === 'ellipse') sl.addShape(pptx.ShapeType.ellipse, o);
+        else if (el.r) sl.addShape(pptx.ShapeType.roundRect, { ...o, rectRadius: Math.min(el.r, el.w / 2, el.h / 2) });
+        else sl.addShape(pptx.ShapeType.rect, o);
+      } else if (el.t === 'line') {
+        sl.addShape(pptx.ShapeType.line, { x: el.x, y: el.y, w: el.w, h: 0, line: { color: hx(el.color), width: el.lw || 0.75 } });
+      } else if (el.t === 'text') {
+        const paras = el.fit || el.paras;
+        if (!paras.length) continue;
+        const size = el.size || el.max;
+        const runs = paras.map((p, j) => ({
+          text: p.text,
+          options: {
+            bold: Boolean(p.bold || el.bold), italic: Boolean(p.italic || el.italic), color: hx(p.color || el.color || tema.cores.texto),
+            fontSize: Math.round(size * (p.k || 1) * 10) / 10, breakLine: j < paras.length - 1, align: p.align || el.align,
+            paraSpaceAfter: j < paras.length - 1 ? Math.round(size * 0.32 * 10) / 10 : 0,
+            ...(p.bullet ? { bullet: { indent: Math.round(size) } } : {}),
+          },
+        }));
+        sl.addText(runs, { ...g, fontFace: fontePptx(tema.fontes[el.fonte]), fontSize: size, align: el.align, valign: el.valign, margin: 0, lineSpacingMultiple: 1.0, fit: 'shrink', wrap: true });
+      }
+    }
+    if (notas[i]) sl.addNotes(notas[i]);
+  });
+  const nome = `Caso2_${(caso.ident.empresa || 'cenarios').normalize('NFD').replace(/[^\w]+/g, '_').slice(0, 40)}.pptx`;
+  await pptx.writeFile({ fileName: nome });
+  return nome;
+}
+
+// Notas do apresentador: fontes completas e lembretes por slide.
+export function notasApresentador(caso) {
+  const fontes = `Fontes: ${FOCUS.citacao} ${IPEA.citacao}`;
+  return [
+    `Apresente a empresa, o perfil dos clientes e por que as variáveis escolhidas importam para o negócio.\n${fontes}`,
+    `Para cada indicador, diferencie dado observado, projeção publicada e hipótese; informe fonte, data e período.\n${fontes}`,
+    `Explique as premissas de cada cenário para ${horizonteTxt(caso.ident)}. P = valor publicado nas fontes; H = hipótese do autor.\n${fontes}`,
+    `Percorra a cadeia: variável econômica → efeito no cliente → efeito nas vendas. Estimativas de receita são hipóteses do autor.\n${fontes}`,
+    `Para cada decisão, indique o risco mitigado ou a oportunidade capturada e o indicador que a sustenta.\n${fontes}`,
+  ];
+}
