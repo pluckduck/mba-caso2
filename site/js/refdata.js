@@ -214,7 +214,7 @@ const mec = (sc, sv, cc, cv) => ({ sobe: { cliente: sc, vendas: sv }, cai: { cli
 const ATIV = mec('Mais receita e confiança no setor; disposição a investir e contratar.', 'Expansão de demanda dos clientes desse setor; pipeline mais robusto.',
   'Cautela e cortes de orçamento no setor.', 'Queda de volume; foco em retenção e em contas resilientes.');
 
-// Fontes externas: só entram aqui variáveis cuja fonte foi aberta e conferida em 14/11/2026.
+// Fontes externas: só entram aqui variáveis cuja fonte oficial foi localizada e conferida em 14/11/2026.
 const NOVAS = [
   nv('precos_adm', 'Preços administrados (energia, combustíveis, tarifas)', 'precos', '%', { focus: 'ipca_adm', ipea: 'ipca_adm', min: 0, max: 15,
     ...mec('Contas de consumo e transporte mais caras; menos renda livre.', 'Custos operacionais e de frete maiores; pressão sobre margens.', 'Alívio no orçamento de famílias e empresas.', 'Menor pressão de custos logísticos e de energia.') }),
@@ -235,6 +235,9 @@ const NOVAS = [
   nv('inadimplencia', 'Inadimplência das famílias', 'juros', 'milhões', { ipea: 'inadimplencia', passo: 1, min: 40, max: 120,
     ...mec('Mais consumidores com restrição de crédito.', 'Queda de vendas a prazo; maior risco de carteira.', 'Mais consumidores aptos a comprar a prazo.', 'Retomada de vendas financiadas.') }),
   nv('servico_divida', 'Serviço da dívida das famílias', 'juros', '% a.a.', { ipea: 'servico_divida', passo: 0.5, min: -10, max: 30 }),
+  nv('endividamento_familias', 'Endividamento e inadimplência das famílias (PEIC)', 'juros', '%', { externa: true, passo: 0.1, min: 0, max: 100,
+    fontes: [{ nome: 'CNC — Observatório do Comércio: Pesquisas CNC (PEIC)', url: 'https://observatorio.portaldocomercio.org.br/dado/pesquisas-cnc/' }],
+    ...mec('Mais renda comprometida com dívidas; menos espaço para novas compras a prazo.', 'Queda de vendas financiadas; maior risco de carteira.', 'Mais folga no orçamento das famílias.', 'Retomada de compras parceladas.') }),
   nv('juros_eua', 'Juros dos Estados Unidos (Fed funds)', 'mundo', '% a.a.', { externa: true, passo: 0.25, min: 0, max: 8,
     fontes: [{ nome: 'Federal Reserve — comunicados do FOMC', url: 'https://www.federalreserve.gov/' }],
     ...mec('Dólar mais forte e crédito externo mais caro.', 'Pressão sobre câmbio e sobre custos dolarizados.', 'Mais apetite por emergentes; câmbio mais favorável.', 'Alívio em custos importados e em juros domésticos.') }),
@@ -249,6 +252,13 @@ const NOVAS = [
   nv('confianca_consumidor', 'Confiança do consumidor', 'atividade', 'pontos', { externa: true, passo: 0.5, min: 40, max: 160,
     fontes: [{ nome: 'FecomercioSP — Pesquisas e indicadores (Índice de Confiança do Consumidor)', url: 'https://pesquisas.fecomercio.com.br' }],
     ...mec('Mais disposição para comprar e assumir parcelas.', 'Conversão maior; espaço para mix de maior valor.', 'Consumo defensivo; adiamento de compras.', 'Ciclo mais longo; promoções e condições facilitadas.') }),
+  nv('intencao_consumo', 'Intenção de consumo das famílias (ICF)', 'atividade', 'pontos', { externa: true, passo: 0.5, min: 40, max: 160,
+    fontes: [{ nome: 'CNC — Pesquisa Intenção de Consumo das Famílias (ICF)', url: 'https://pesquisascnc.com.br/pesquisa-icf/' },
+      { nome: 'CNC — Observatório do Comércio: Pesquisas CNC', url: 'https://observatorio.portaldocomercio.org.br/dado/pesquisas-cnc/' }],
+    ...mec('Famílias mais satisfeitas com renda e emprego; mais disposição para comprar.', 'Potencial de vendas maior no comércio e nos serviços.', 'Famílias mais cautelosas com emprego e crédito.', 'Vendas mais lentas, sobretudo de bens duráveis.') }),
+  nv('veiculos', 'Produção e vendas de veículos', 'atividade', 'mil unidades', { externa: true, passo: 1, min: 0, max: 400,
+    fontes: [{ nome: 'Anfavea — Central de dados (estatísticas)', url: 'https://anfavea.com.br/site/central-de-dados/' },
+      { nome: 'Anfavea — Carta da Anfavea (boletim mensal)', url: 'https://anfavea.com.br/site/conteudos/carta-da-anfavea/' }], ...ATIV }),
   nv('confianca_industria', 'Confiança do empresário industrial (ICEI)', 'atividade', 'pontos', { externa: true, passo: 0.5, min: 20, max: 80,
     fontes: [{ nome: 'CNI — ICEI: Índice de Confiança do Empresário Industrial (estatísticas mensais)', url: 'https://www.portaldaindustria.com.br/estatisticas/icei-indice-de-confianca-do-empresario-industrial/' }],
     ...mec('Mais projetos aprovados e contratações.', 'Mais oportunidades B2B; decisões mais rápidas.', 'Projetos adiados; orçamentos travados.', 'Ciclos longos; foco em eficiência e redução de custos.') }),
