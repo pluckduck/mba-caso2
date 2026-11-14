@@ -117,12 +117,14 @@ export async function carregarCaso() {
   return linhas?.[0] || null;
 }
 
-export async function salvarCaso(dados, tema) {
+// prog = { pct, ok, total }: progresso da entrega, gravado para o painel do administrador.
+export async function salvarCaso(dados, tema, prog = null) {
   const registro = { dados, tema, atualizado_em: new Date().toISOString() };
   if (!remoto) { localStorage.setItem(LS_LOCAL, JSON.stringify(registro)); return registro; }
   const t = await tokenValido();
+  const extra = prog ? { progresso: prog.pct, itens_ok: prog.ok, itens_total: prog.total } : {};
   await chamar('/rest/v1/casos?on_conflict=user_id', {
-    metodo: 'POST', token: t, corpo: { user_id: sessao.user.id, ...registro },
+    metodo: 'POST', token: t, corpo: { user_id: sessao.user.id, ...registro, ...extra },
     cabecalhos: { Prefer: 'resolution=merge-duplicates,return=minimal' },
   });
   return registro;
@@ -140,4 +142,23 @@ export async function carregarReferencias() {
     if (!focus?.length || !ipea?.length) return null;
     return { fontes, focus, ipea };
   } catch { return null; }
+}
+
+// ---------- Administração ----------
+export async function registrarAcesso() {
+  if (!remoto) return;
+  try { const t = await tokenValido(); await chamar('/rest/v1/rpc/registrar_acesso', { metodo: 'POST', token: t, corpo: {} }); } catch { /* não impede o uso */ }
+}
+
+// Cada usuário só consegue ler a própria linha em "administradores" (RLS); se ela existe, é administrador.
+export async function ehAdmin() {
+  if (!remoto) return false;
+  try { const t = await tokenValido(); const l = await chamar('/rest/v1/administradores?select=user_id&limit=1', { token: t }); return Array.isArray(l) && l.length > 0; }
+  catch { return false; }
+}
+
+// Lista de contas com progresso, último acesso e tema. O servidor recusa quem não é administrador.
+export async function painelAdmin() {
+  const t = await tokenValido();
+  return chamar('/rest/v1/rpc/painel_admin', { metodo: 'POST', token: t, corpo: {} });
 }

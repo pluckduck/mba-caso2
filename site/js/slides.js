@@ -305,7 +305,7 @@ function slide3(ctx) {
   return els;
 }
 
-const SETA = { sobe: '↑', cai: '↓', estavel: '→' };
+const SETA = { sobe: '↑', cai: '↓', estavel: '(estável)' };
 
 // ---------- Slide 4: impactos ----------
 function slide4(ctx) {

@@ -150,6 +150,8 @@ export function montarSlide(els, tema, classe = '') {
   const caixa = h('div', { class: `slide-caixa ${classe}` });
   const slide = renderHTML(els, tema, 1280);
   slide.style.transformOrigin = 'top left';
+  // Fora do fluxo: o slide (1280 px antes da escala) não deve alargar o contêiner.
+  slide.style.position = 'absolute'; slide.style.left = '0'; slide.style.top = '0';
   caixa.append(slide);
   const ajustar = () => { const s = caixa.clientWidth / 1280; if (s > 0) { slide.style.transform = `scale(${s})`; caixa.style.height = `${(1280 * H / W) * s}px`; } };
   new ResizeObserver(ajustar).observe(caixa);

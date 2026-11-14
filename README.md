@@ -34,12 +34,20 @@ Com `site/js/config.js` vazio, o aplicativo roda em **modo local**: sem login, c
 
 ## Implantação
 
-1. **Supabase**: aplicar `supabase/migrations/001_esquema.sql` e `supabase/seed.sql`; publicar a função `supabase/functions/cadastro` com `verify_jwt = false`; cadastrar um código da turma:
+1. **Supabase**: aplicar `supabase/migrations/001_esquema.sql`, `supabase/migrations/002_admin.sql` e `supabase/seed.sql`; publicar a função `supabase/functions/cadastro` com `verify_jwt = false`; cadastrar um código da turma:
    ```sql
    insert into public.codigos_turma (codigo) values ('ESCOLHA-UM-CODIGO');
    ```
 2. **Configuração**: preencher `SUPABASE_URL` e `SUPABASE_KEY` (chave *publishable*) em `site/js/config.js`. Essa chave é pública por definição; a proteção dos dados vem das políticas de RLS.
 3. **Netlify**: vincular este repositório; diretório de publicação `site`, sem comando de build.
+
+## Painel do administrador
+
+Quem estiver na tabela `public.administradores` vê o menu **Turma**: contas criadas, progresso da entrega, último acesso e as escolhas de tema de cada participante. O conteúdo dos casos não é exposto. Para tornar um usuário administrador:
+
+```sql
+insert into public.administradores (user_id) select id from auth.users where email = 'EMAIL-DO-ADMINISTRADOR';
+```
 
 ## Desenvolvimento
 

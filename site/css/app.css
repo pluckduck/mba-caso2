@@ -159,7 +159,7 @@ input[type="color"] { width: 40px; height: 32px; padding: 2px; flex: none; }
 .arg .pag { font-size: .76rem; color: var(--c-suave); } .origem { margin-top: .8rem; }
 
 /* Slides */
-.slide-caixa { width: 100%; overflow: hidden; border: 1px solid var(--c-borda); border-radius: 4px; box-shadow: var(--sombra); background: #fff; }
+.slide-caixa { position: relative; aspect-ratio: 16 / 9; width: 100%; overflow: hidden; border: 1px solid var(--c-borda); border-radius: 4px; box-shadow: var(--sombra); background: #fff; }
 .slide-caixa.mini { box-shadow: none; pointer-events: none; }
 .slide p { margin: 0; }
 .slides-lista { display: flex; flex-direction: column; gap: 1.6rem; }
@@ -185,6 +185,17 @@ input[type="color"] { width: 40px; height: 32px; padding: 2px; flex: none; }
 .cor { display: flex; align-items: center; gap: .5rem; font-weight: 400; }
 .chaves { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin: .6rem 0 1rem; } .chave { display: flex; align-items: center; gap: .4rem; font-weight: 400; }
 .contrastes { display: flex; flex-wrap: wrap; }
+
+/* Turma (administração) */
+.prog { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; min-width: 220px; }
+.prog-trilho { flex: 1 1 120px; height: 10px; border-radius: 99px; background: var(--tom); overflow: hidden; }
+.prog-valor { height: 100%; background: var(--c-favoravel); border-radius: 99px; }
+.amostras.grandes { flex-wrap: wrap; width: 150px; } .amostras.grandes i { width: 20px; height: 20px; }
+.amostras i.alterada { outline: 2px solid var(--c-destaque); outline-offset: 1px; }
+.tabela.custom td { font-size: .82rem; } .tabela.custom .alterado { font-weight: 700; color: var(--c-destaque); }
+.previa-mini { width: 240px; min-width: 240px; } .elementos { min-width: 220px; }
+.turma-dist { max-width: 560px; margin-bottom: 1rem; }
+.kpi-vals small { display: inline; margin-left: .2rem; }
 
 /* Fontes */
 .fontes { list-style: none; padding: 0; margin: 0; display: grid; gap: .7rem; } .fontes li span:last-child { display: block; font-size: .86rem; color: var(--c-suave); } .fontes a { font-weight: 700; margin-right: .4rem; }

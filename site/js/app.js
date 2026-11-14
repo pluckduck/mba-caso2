@@ -8,7 +8,7 @@ import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVari
 import { construir, exportarPptx, notasApresentador, renderHTML, TITULOS } from './slides.js';
 import { explorador } from './explorador.js';
 
-const estado = { caso: casoVazio(), tema: { id: 'executivo' }, salvo: 'ok', origemDados: 'arquivo' };
+const estado = { caso: casoVazio(), tema: { id: 'executivo' }, salvo: 'ok', origemDados: 'arquivo', admin: false };
 const raiz = document.getElementById('app');
 let vivos = [];
 let tSalvar = null, tVivo = null;
@@ -25,7 +25,7 @@ function marcarSalvo(s) {
 }
 async function salvarAgora() {
   clearTimeout(tSalvar);
-  try { await api.salvarCaso(estado.caso, estado.tema); marcarSalvo('ok'); }
+  try { await api.salvarCaso(estado.caso, estado.tema, progresso(validar(estado.caso))); marcarSalvo('ok'); }
   catch (e) { marcarSalvo('erro'); aviso(`Não foi possível salvar: ${e.message}`, 'erro'); }
 }
 function mudou() {
@@ -76,7 +76,8 @@ function atualizarNav() {
   if (!nav) return;
   const prog = progresso(validar(estado.caso));
   const atual = rotaAtual();
-  nav.replaceChildren(...ROTAS.map(r => {
+  const rotas = estado.admin ? [...ROTAS, { id: 'turma', titulo: 'Turma (só você vê)', icone: '☷', separador: true }] : ROTAS;
+  nav.replaceChildren(...rotas.map(r => {
     const p = r.etapa ? prog.porEtapa[r.etapa] : null;
     return h('a', { href: `#/${r.id}`, class: `nav-item ${atual === r.id ? 'ativo' : ''} ${r.separador ? 'separador' : ''}`, 'aria-current': atual === r.id ? 'page' : null },
       h('span', { class: `nav-ico ${p && p.ok === p.total ? 'feito' : ''}` }, p ? (p.ok === p.total ? '✓' : String(r.etapa)) : r.icone),
@@ -112,6 +113,7 @@ function desenharRota(manterRolagem = false) {
   const r = rotaAtual();
   let vista;
   if (r.startsWith('etapa/')) vista = ({ 1: etapa1, 2: etapa2, 3: etapa3, 4: etapa4, 5: etapa5 }[Number(r.split('/')[1])] || painel)();
+  else if (r === 'turma' && estado.admin) vista = vistaTurma();
   else vista = ({ painel, slides: vistaSlides, dados: vistaDados, tema: vistaTema, fontes: vistaFontes }[r] || painel)();
   main.replaceChildren(vista);
   atualizarNav();
@@ -587,6 +589,84 @@ function vistaFontes() {
       h('ul', { class: 'fontes' }, FONTES_CONSULTA.map(f => h('li', {}, h('a', { href: f.url, target: '_blank', rel: 'noopener' }, `${f.n}. ${f.nome} ↗`), f.prioritaria ? selo('prioritária', 'proj') : null, h('span', {}, f.desc))))));
 }
 
+// ---------- Turma (somente o administrador) ----------
+const ATRIBUTOS_TEMA = Object.keys(TEMAS[0].cores).length + Object.keys(TEMAS[0].fontes).length + Object.keys(TEMAS[0].el).length;
+// Índice de customização: parcela dos atributos do tema (cores, fontes e elementos) alterada em relação ao tema base.
+function indiceCustomizacao(salvo) {
+  const base = TEMAS.find(t => t.id === salvo?.id) || TEMAS[0];
+  const res = resolverTema(salvo);
+  const mudou = { cores: [], fontes: [], el: [] };
+  for (const g of ['cores', 'fontes', 'el']) for (const k of Object.keys(base[g])) if (String(res[g][k]).toUpperCase() !== String(base[g][k]).toUpperCase()) mudou[g].push(k);
+  const n = mudou.cores.length + mudou.fontes.length + mudou.el.length;
+  return { base, res, mudou, n, pct: Math.round((n / ATRIBUTOS_TEMA) * 100) };
+}
+const dataHora = iso => (iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+function haQuanto(iso) {
+  if (!iso) return '';
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `há ${min} min`;
+  if (min < 1440) return `há ${Math.round(min / 60)} h`;
+  return `há ${Math.round(min / 1440)} dia(s)`;
+}
+function vistaTurma() {
+  const corpo = h('div', { class: 'turma-corpo' }, h('p', { class: 'carregando' }, 'Carregando…'));
+  const nomeFonte = id => (FONTES_TIPO.find(f => f.id === id)?.nome || id).replace(/ \(.*\)$/, '');
+  const rotuloOp = (grupo, v) => (OPCOES_ELEMENTOS[grupo].find(o => o[0] === v) || [v, v])[1];
+  const desenhar = linhasDados => {
+    const comCaso = linhasDados.filter(l => l.caso_atualizado_em);
+    const comProg = linhasDados.filter(l => l.progresso !== null && l.progresso !== undefined);
+    const media = comProg.length ? Math.round(comProg.reduce((a, l) => a + l.progresso, 0) / comProg.length) : null;
+    const kpi = (rot, val, sub) => h('div', { class: 'kpi' }, h('span', { class: 'kpi-nome' }, rot), h('div', { class: 'kpi-vals' }, h('div', {}, h('strong', {}, val), sub ? h('small', {}, sub) : null)));
+    const contas = h('section', { class: 'cartao' }, h('h2', {}, 'Contas e progresso'),
+      h('div', { class: 'tabela-rolagem' }, h('table', { class: 'tabela' },
+        h('thead', {}, h('tr', {}, ['Participante', 'Conta criada em', 'Último acesso', 'Progresso da entrega'].map(t => h('th', {}, t)))),
+        h('tbody', {}, linhasDados.map(l => h('tr', {},
+          h('td', {}, h('strong', {}, l.nome || '(sem nome)'), h('div', { class: 'nota' }, l.email)),
+          h('td', {}, dataHora(l.conta_criada_em)),
+          h('td', {}, dataHora(l.ultimo_acesso), h('div', { class: 'nota' }, haQuanto(l.ultimo_acesso))),
+          h('td', {}, l.progresso === null || l.progresso === undefined
+            ? h('span', { class: 'nota' }, l.caso_atualizado_em ? 'caso iniciado; progresso ainda não registrado' : 'ainda não iniciou o caso')
+            : h('div', { class: 'prog' }, h('div', { class: 'prog-trilho' }, h('div', { class: 'prog-valor', style: `width:${l.progresso}%` })), h('strong', {}, `${l.progresso}%`), h('span', { class: 'nota' }, `${l.itens_ok} de ${l.itens_total} itens`)))))))));
+
+    const comTema = linhasDados.filter(l => l.tema && l.tema.id).map(l => ({ ...l, ic: indiceCustomizacao(l.tema) })).sort((a, b) => b.ic.pct - a.ic.pct);
+    const contagem = TEMAS.map(t => ({ rotulo: t.nome, valor: comTema.filter(l => l.ic.base.id === t.id).length, cor: t.cores.primaria })).filter(x => x.valor > 0);
+    const amostra = (ic, k) => h('i', { class: ic.mudou.cores.includes(k) ? 'alterada' : '', style: `background:${ic.res.cores[k]}`, title: `${ROTULOS_CORES[k]}: ${ic.res.cores[k]}${ic.mudou.cores.includes(k) ? ' (alterada)' : ''}` });
+    const marca = (ic, grupo, k, texto) => h('span', { class: ic.mudou[grupo].includes(k) ? 'alterado' : '' }, texto);
+    const custom = h('section', { class: 'cartao' }, h('h2', {}, 'Índice de customização visual'),
+      h('p', { class: 'ajuda' }, `O índice é a parcela dos ${ATRIBUTOS_TEMA} atributos do tema (11 cores, 2 fontes e 8 elementos) que o participante alterou em relação ao tema base escolhido. Itens alterados aparecem destacados. A prévia aplica o tema de cada participante ao slide 3 do seu próprio caso.`),
+      comTema.length ? [
+        contagem.length ? h('div', { class: 'turma-dist' }, barrasGrupos([{ nome: 'Temas base escolhidos (participantes)', itens: contagem }], { casas: 0 })) : null,
+        h('div', { class: 'tabela-rolagem' }, h('table', { class: 'tabela custom' },
+          h('thead', {}, h('tr', {}, ['Participante', 'Tema base', 'Índice', 'Paleta', 'Tipografia', 'Elementos', 'Prévia'].map(t => h('th', {}, t)))),
+          h('tbody', {}, comTema.map(l => { const ic = l.ic, e = ic.res.el; return h('tr', {},
+            h('td', {}, h('strong', {}, l.nome || l.email)),
+            h('td', {}, ic.base.nome),
+            h('td', { class: 'num' }, `${ic.pct}%`, h('div', { class: 'nota' }, `${ic.n} de ${ATRIBUTOS_TEMA}`)),
+            h('td', {}, h('div', { class: 'amostras grandes' }, Object.keys(ROTULOS_CORES).map(k => amostra(ic, k)))),
+            h('td', {}, marca(ic, 'fontes', 'titulo', `Títulos: ${nomeFonte(ic.res.fontes.titulo)}`), h('br'), marca(ic, 'fontes', 'corpo', `Texto: ${nomeFonte(ic.res.fontes.corpo)}`)),
+            h('td', { class: 'elementos' }, marca(ic, 'el', 'cabecalho', rotuloOp('cabecalho', e.cabecalho)), ' · ', marca(ic, 'el', 'cartao', `cartões: ${rotuloOp('cartao', e.cartao).toLowerCase()}`), ' · ', marca(ic, 'el', 'deco', `decoração: ${rotuloOp('deco', e.deco).toLowerCase()}`), ' · ', marca(ic, 'el', 'raio', `cantos ${e.raio}px`),
+              h('br'), [['rodape', 'rodapé'], ['numeracao', 'numeração'], ['fontes', 'fontes no rodapé'], ['caixaAlta', 'caixa alta']].map(([k, t], i) => [i ? ' · ' : '', marca(ic, 'el', k, `${t}: ${e[k] ? 'sim' : 'não'}`)])),
+            h('td', { class: 'previa-mini' }, montarSlide(construir(estado.caso, ic.res).slides[2], ic.res, 'mini'))); })))),
+      ] : h('p', {}, 'Nenhum participante salvou um caso ainda.'));
+
+    corpo.replaceChildren(
+      h('div', { class: 'kpis' },
+        kpi('Contas criadas', String(linhasDados.length)),
+        kpi('Iniciaram o caso', String(comCaso.length), linhasDados.length ? ` de ${linhasDados.length}` : ''),
+        kpi('Progresso médio', media === null ? '—' : `${media}%`, comProg.length ? ` entre ${comProg.length} com registro` : ''),
+        kpi('Concluíram 100%', String(comProg.filter(l => l.progresso === 100).length))),
+      contas, custom);
+  };
+  const carregar = () => api.painelAdmin().then(desenhar).catch(e => corpo.replaceChildren(h('p', { class: 'erro' }, `Não foi possível carregar: ${e.message}`)));
+  carregar();
+  return h('div', { class: 'vista larga' },
+    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Administração · visível somente para você'), h('h1', {}, 'Turma'),
+      h('p', { class: 'lead' }, 'Quem criou conta, quanto do roteiro já concluiu, quando acessou pela última vez e como personalizou o visual. O conteúdo dos casos dos colegas não é exibido.'),
+      h('div', { class: 'acoes' }, botao('Atualizar', carregar, 'fantasma'))),
+    corpo);
+}
+
 // ---------- Acesso ----------
 function telaAcesso(modo = 'entrar', msg = '') {
   const d = { nome: '', email: '', senha: '', codigo: '' };
@@ -628,8 +708,10 @@ function telaAcesso(modo = 'entrar', msg = '') {
 async function iniciarSessao() {
   raiz.replaceChildren(h('div', { class: 'carregando' }, 'Carregando…'));
   try {
-    const [registro, refs] = await Promise.all([api.carregarCaso(), api.carregarReferencias()]);
+    const [registro, refs, admin] = await Promise.all([api.carregarCaso(), api.carregarReferencias(), api.ehAdmin()]);
     hidratarReferencias(refs);
+    estado.admin = admin;
+    api.registrarAcesso();
     estado.caso = normalizar(registro?.dados);
     estado.tema = registro?.tema && registro.tema.id ? registro.tema : { id: 'executivo' };
     if (!estado.caso.ident.aluno) estado.caso.ident.aluno = api.usuario()?.user_metadata?.nome || '';
