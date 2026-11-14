@@ -607,7 +607,7 @@ function telaAcesso(modo = 'entrar', msg = '') {
   const cmp = (rotulo, chave, tipo, extra = {}) => campo({ rotulo, obj: d, chave, tipo, atributos: { required: true, ...extra } });
   const titulos = { entrar: 'Entrar', criar: 'Criar conta', recuperar: 'Recuperar senha', 'nova-senha': 'Definir nova senha' };
   raiz.replaceChildren(h('div', { class: 'acesso' },
-    h('div', { class: 'acesso-lado' }, h('span', { class: 'marca-sigla grande' }, 'C2'),
+    h('div', { class: 'acesso-lado' },
       h('p', { class: 'acesso-curso' }, h('span', { class: 'kicker' }, 'Cenários Econômicos em Vendas'), h('span', { class: 'acesso-prof' }, 'Prof. Dr. José Alberto de Camargo')),
       h('h1', {}, 'Estudo de Caso 2'), h('p', {}, 'Cenários econômicos e estratégias de vendas'),
       h('p', { class: 'ajuda' }, 'MBA Gestão Comercial e SalesTech · roteiro guiado com os dados do Relatório Focus e da Carta de Conjuntura do Ipea, e geração dos cinco slides da entrega.')),
