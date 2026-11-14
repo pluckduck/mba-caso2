@@ -92,7 +92,7 @@ function montarCasca() {
   raiz.replaceChildren(
     h('a', { href: '#conteudo', class: 'pular' }, 'Pular para o conteúdo'),
     h('aside', { class: 'lateral' },
-      h('div', { class: 'marca' }, h('span', { class: 'marca-sigla' }, 'C2'), h('div', {}, h('strong', {}, 'Estudo de Caso 2'), h('span', {}, 'Cenários econômicos e vendas'))),
+      h('div', { class: 'marca' }, h('div', {}, h('strong', {}, 'Estudo de Caso 2'), h('span', {}, 'Cenários econômicos e vendas'))),
       h('div', { id: 'nav-pct', class: 'nav-pct' }),
       h('nav', { id: 'nav', 'aria-label': 'Etapas do caso' }),
       h('div', { class: 'lateral-pe' },
