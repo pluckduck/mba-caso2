@@ -250,7 +250,7 @@ const NOVAS = [
     fontes: [{ nome: 'FecomercioSP — Pesquisas e indicadores (Índice de Confiança do Consumidor)', url: 'https://pesquisas.fecomercio.com.br' }],
     ...mec('Mais disposição para comprar e assumir parcelas.', 'Conversão maior; espaço para mix de maior valor.', 'Consumo defensivo; adiamento de compras.', 'Ciclo mais longo; promoções e condições facilitadas.') }),
   nv('confianca_industria', 'Confiança do empresário industrial (ICEI)', 'atividade', 'pontos', { externa: true, passo: 0.5, min: 20, max: 80,
-    fontes: [{ nome: 'CNI — Confederação Nacional da Indústria (ICEI e Indicadores Industriais)', url: 'https://www.portaldaindustria.com.br/cni/' }],
+    fontes: [{ nome: 'CNI — ICEI: Índice de Confiança do Empresário Industrial (estatísticas mensais)', url: 'https://www.portaldaindustria.com.br/estatisticas/icei-indice-de-confianca-do-empresario-industrial/' }],
     ...mec('Mais projetos aprovados e contratações.', 'Mais oportunidades B2B; decisões mais rápidas.', 'Projetos adiados; orçamentos travados.', 'Ciclos longos; foco em eficiência e redução de custos.') }),
 
   nv('salario_minimo', 'Salário mínimo', 'trabalho', 'R$', { externa: true, passo: 1, min: 1000, max: 2500,
