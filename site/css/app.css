@@ -178,6 +178,23 @@ input[type="color"] { width: 40px; height: 32px; padding: 2px; flex: none; }
 .tema-cartao { font: inherit; text-align: left; background: var(--c-superficie); color: var(--c-texto); border: 2px solid var(--c-borda); border-radius: var(--raio); padding: .5rem; cursor: pointer; display: flex; flex-direction: column; gap: .3rem; }
 .tema-cartao.ativo { border-color: var(--c-primaria); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primaria) 30%, transparent); }
 .tema-cartao span { font-size: .78rem; color: var(--c-suave); }
+.tema-meu { background: var(--c-superficie); border: 2px solid var(--c-borda); border-radius: var(--raio); padding: .5rem; display: flex; flex-direction: column; gap: .5rem; }
+.tema-meu.ativo { border-color: var(--c-primaria); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primaria) 30%, transparent); }
+.tema-escolher { font: inherit; text-align: left; background: none; color: var(--c-texto); border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; gap: .3rem; }
+.tema-escolher span { font-size: .78rem; color: var(--c-suave); }
+.tema-meu .acoes .btn { min-height: 40px; }
+.vazio-temas { margin: 0; padding: .9rem 1rem; border: 1.5px dashed var(--c-suave); border-radius: var(--raio); color: var(--c-suave); font-size: .92rem; }
+.caixa-salvar { border: 1.5px solid var(--c-primaria); background: var(--tom); border-radius: var(--raio); padding: .9rem 1rem; margin: 1rem 0 .6rem; display: flex; flex-direction: column; gap: .6rem; }
+.caixa-salvar p { margin: 0; font-size: .92rem; }
+.caixa-titulo { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; } .caixa-titulo strong { font-size: 1.02rem; } .caixa-titulo .selo { margin: 0; }
+.linha-nome { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; }
+.linha-nome label { flex: 1 1 220px; display: flex; flex-direction: column; gap: .25rem; font-weight: 700; font-size: .84rem; }
+.linha-nome input, .form-nome-tema input { background: var(--c-superficie); min-height: 44px; }
+.linha-nome .btn { min-height: 44px; }
+.form-nome-tema .erro { color: var(--c-adverso); font-weight: 600; margin: .2rem 0 .6rem; min-height: 1.2em; }
+.selo.pendente { border-style: dashed; border-color: var(--c-destaque); } .selo.contagem { border-color: var(--c-primaria); }
+h2 .selo { margin-left: .4rem; vertical-align: middle; font-family: var(--f-corpo); }
+.btn.contorno { border-color: var(--c-primaria); color: var(--c-primaria); } .btn.perigo { border-color: var(--c-adverso); color: var(--c-adverso); }
 .amostras { display: flex; gap: 3px; } .amostras i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(128, 128, 128, .4); }
 .tema-dupla { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.4fr); gap: 1rem; align-items: start; }
 .cartao.fixo { position: sticky; top: 1rem; }

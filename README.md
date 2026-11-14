@@ -11,7 +11,7 @@ Aplicativo guiado para a execução individual do Estudo de Caso 2 da disciplina
 | 3 | Arquitetura de cenários (12 meses) | Trajetórias base, favorável e adversa; distinção automática entre valor publicado e hipótese do autor |
 | 4 | Impactos comerciais | Matriz de impactos, cadeia variável → cliente → vendas e simulador de sensibilidade da receita |
 | 5 | Recomendações | Decisões comerciais, síntese executiva e validação da entrega |
-| Slides | Entrega | Cinco slides gerados a partir do caso, dez temas personalizáveis, modo de apresentação, exportação em PPTX e PDF |
+| Slides | Entrega | Cinco slides gerados a partir do caso, dez temas personalizáveis (o participante pode salvar temas próprios com nome), modo de apresentação, exportação em PPTX e PDF |
 
 Não há uso de inteligência artificial: os textos analíticos são sempre do aluno. Os "roteiros de raciocínio" são sugestões didáticas genéricas e estão identificados como tal.
 

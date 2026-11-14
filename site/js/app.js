@@ -4,7 +4,7 @@ import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } 
 import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
-  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples } from './modelo.js';
+  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid } from './modelo.js';
 import { construir, exportarPptx, notasApresentador, renderHTML, TITULOS } from './slides.js';
 import { explorador } from './explorador.js';
 
@@ -14,6 +14,44 @@ let vivos = [];
 let tSalvar = null, tVivo = null;
 
 const temaAtual = () => resolverTema(estado.tema);
+
+// ---------- Temas salvos pelo participante ("Meus temas") ----------
+// Ficam dentro do próprio registro do tema: { id, cores, fontes, el, meu: <uid do tema salvo em uso>, salvos: [{ uid, nome, id, cores, fontes, el }] }.
+const MAX_TEMAS_SALVOS = 12, MAX_NOME_TEMA = 40;
+const copiar = o => JSON.parse(JSON.stringify(o || {}));
+const soEscolha = t => ({ id: t.id, cores: t.cores || {}, fontes: t.fontes || {}, el: t.el || {} });
+const mesmoTema = (a, b) => JSON.stringify(resolverTema(soEscolha(a))) === JSON.stringify(resolverTema(soEscolha(b)));
+const temasSalvos = () => (Array.isArray(estado.tema.salvos) ? estado.tema.salvos : []);
+const temaSalvoAtual = () => temasSalvos().find(x => x.uid === estado.tema.meu) || null;
+const nomeTemaBase = id => (TEMAS.find(t => t.id === id) || TEMAS[0]).nome;
+function normalizarTema(t) {
+  if (!t || typeof t !== 'object' || !t.id) return { id: 'executivo' };
+  const out = { ...t };
+  const salvos = (Array.isArray(t.salvos) ? t.salvos : []).filter(x => x && typeof x === 'object' && x.uid && typeof x.nome === 'string' && x.nome.trim())
+    .slice(0, MAX_TEMAS_SALVOS).map(x => ({ uid: String(x.uid), nome: x.nome.trim().slice(0, MAX_NOME_TEMA), ...soEscolha(x) }));
+  if (salvos.length) out.salvos = salvos; else delete out.salvos;
+  if (!salvos.some(x => x.uid === out.meu)) delete out.meu;
+  return out;
+}
+// Há personalização que se perderia ao trocar de tema? (tema salvo alterado, ou tema do aplicativo alterado e ainda sem nome)
+function temAlteracoesSoltas() {
+  const salvo = temaSalvoAtual();
+  return salvo ? !mesmoTema(estado.tema, salvo) : indiceCustomizacao(estado.tema).n > 0;
+}
+const confirmarTroca = () => !temAlteracoesSoltas() || confirm('As alterações que você fez neste tema ainda não foram salvas com um nome e serão perdidas. Trocar de tema mesmo assim?');
+function escolherTemaBase(id) { estado.tema = { id, ...(temasSalvos().length ? { salvos: estado.tema.salvos } : {}) }; }
+function escolherTemaSalvo(uidTema) {
+  const x = temasSalvos().find(t => t.uid === uidTema); if (!x) return;
+  estado.tema = { id: x.id, cores: copiar(x.cores), fontes: copiar(x.fontes), el: copiar(x.el), meu: x.uid, salvos: estado.tema.salvos };
+}
+// Devolve a mensagem de erro do nome, ou '' se estiver válido.
+function erroNomeTema(nome, ignorarUid = null) {
+  const n = nome.trim().toLowerCase();
+  if (!n) return 'Dê um nome ao tema.';
+  if (TEMAS.some(t => t.nome.toLowerCase() === n)) return 'Este nome já é de um dos dez temas do aplicativo. Escolha outro.';
+  if (temasSalvos().some(t => t.uid !== ignorarUid && t.nome.toLowerCase() === n)) return 'Você já tem um tema salvo com este nome.';
+  return '';
+}
 
 // ---------- Persistência ----------
 function marcarSalvo(s) {
@@ -496,8 +534,16 @@ function imprimir() {
   window.print();
 }
 function seletorTema() {
-  const sel = h('select', { 'aria-label': 'Tema visual', onchange: e => { estado.tema = { id: e.target.value }; mudou(); redesenhar(); } }, TEMAS.map(t => h('option', { value: t.id }, t.nome)));
-  sel.value = temaAtual().id;
+  const salvos = temasSalvos();
+  const atual = () => (temaSalvoAtual() ? `meu:${estado.tema.meu}` : temaAtual().id);
+  const doApp = TEMAS.map(t => h('option', { value: t.id }, t.nome));
+  const sel = h('select', { 'aria-label': 'Tema visual', onchange: e => {
+    const v = e.target.value;
+    if (!confirmarTroca()) { sel.value = atual(); return; }
+    v.startsWith('meu:') ? escolherTemaSalvo(v.slice(4)) : escolherTemaBase(v);
+    mudou(); redesenhar();
+  } }, salvos.length ? [h('optgroup', { label: 'Meus temas' }, salvos.map(x => h('option', { value: `meu:${x.uid}` }, x.nome))), h('optgroup', { label: 'Temas do aplicativo' }, doApp)] : doApp);
+  sel.value = atual();
   return sel;
 }
 function vistaSlides() {
@@ -572,21 +618,90 @@ function vistaTema() {
   const previa = h('div', { class: 'previa' });
   const contr = h('div', { class: 'contrastes' });
   const galeria = h('div', { class: 'galeria' });
+  const meus = h('div', {});
+  const tituloMeus = h('h2', {}, 'Meus temas');
   const painelEd = h('div', { class: 'editor-tema' });
+  const caixaSalvar = h('div', {});
+  const seloEstado = h('span', {});
+  let nomeRascunho = '';
   const garantir = k => (estado.tema[k] ||= {});
+  const mini = t => montarSlide(construir(c, resolverTema(t)).slides[2], resolverTema(t), 'mini');
+  const amostras = cores => h('div', { class: 'amostras' }, ['primaria', 'destaque', 'fundo', 'texto', 'favoravel', 'adverso'].map(k => h('i', { style: `background:${cores[k]}` })));
+  // Pede um nome em uma janela (usado em "Salvar como novo tema" e "Renomear").
+  const pedirNome = (titulo, inicial, rotuloBotao, ignorarUid, aoConfirmar) => {
+    const erro = h('p', { class: 'erro', role: 'alert' });
+    const entrada = h('input', { type: 'text', maxlength: MAX_NOME_TEMA, value: inicial, 'aria-label': 'Nome do tema' });
+    const confirmar = () => { const msg = erroNomeTema(entrada.value, ignorarUid); if (msg) { erro.textContent = msg; entrada.focus(); return; } fechar(); aoConfirmar(entrada.value.trim()); };
+    entrada.addEventListener('keydown', e => { if (e.key === 'Enter') confirmar(); });
+    const fechar = modal(titulo, h('div', { class: 'form-nome-tema' }, h('label', { class: 'campo' }, 'Nome do tema', entrada), erro,
+      h('div', { class: 'acoes' }, botao(rotuloBotao, confirmar, 'primario'), botao('Cancelar', () => fechar(), 'fantasma'))));
+    entrada.focus(); entrada.select();
+  };
+  const salvarNovo = nome => {
+    if (temasSalvos().length >= MAX_TEMAS_SALVOS) { aviso(`O limite é de ${MAX_TEMAS_SALVOS} temas salvos. Exclua um para salvar outro.`, 'erro'); return; }
+    const novo = { uid: uid(), nome, ...copiar(soEscolha(estado.tema)) };
+    estado.tema.salvos = [...temasSalvos(), novo]; estado.tema.meu = novo.uid; nomeRascunho = '';
+    atualizar(true); aviso(`Tema "${nome}" salvo em Meus temas.`);
+  };
+  const desenharMeus = () => {
+    const lista = temasSalvos();
+    tituloMeus.replaceChildren('Meus temas', lista.length ? h('span', { class: 'selo contagem' }, lista.length === 1 ? '1 salvo' : `${lista.length} salvos`) : '');
+    meus.className = lista.length ? 'galeria' : '';
+    meus.replaceChildren(...(lista.length ? lista.map(x => {
+      const ativo = estado.tema.meu === x.uid;
+      return h('div', { class: `tema-meu ${ativo ? 'ativo' : ''}` },
+        h('button', { class: 'tema-escolher', 'aria-pressed': String(ativo), onclick: () => { if (ativo || !confirmarTroca()) return; escolherTemaSalvo(x.uid); atualizar(true); } },
+          mini(x), h('strong', {}, x.nome), h('span', {}, `Criado a partir de ${nomeTemaBase(x.id)}`), amostras(resolverTema(x).cores)),
+        h('div', { class: 'acoes' },
+          botao('Renomear', () => pedirNome('Renomear tema', x.nome, 'Salvar nome', x.uid, nome => { x.nome = nome; atualizar(true); aviso('Nome do tema atualizado.'); }), 'pequeno'),
+          botao('Excluir', () => {
+            if (!confirm(ativo ? `Excluir o tema "${x.nome}"? Os slides voltam ao tema ${nomeTemaBase(x.id)}.` : `Excluir o tema "${x.nome}"?`)) return;
+            estado.tema.salvos = temasSalvos().filter(t => t.uid !== x.uid);
+            if (ativo) escolherTemaBase(x.id); else if (!estado.tema.salvos.length) delete estado.tema.salvos;
+            atualizar(true); aviso(`Tema "${x.nome}" excluído.`);
+          }, 'pequeno perigo')));
+    }) : [h('p', { class: 'vazio-temas' }, 'Nenhum tema salvo ainda. Personalize um dos dez temas e salve a combinação com um nome seu, no fim do quadro Personalização.')]));
+  };
+  // Caixa de salvamento: muda conforme o tema em uso (do aplicativo ou salvo) e se há alterações pendentes.
+  const desenharSalvar = () => {
+    const salvo = temaSalvoAtual(), base = nomeTemaBase(estado.tema.id), n = indiceCustomizacao(estado.tema).n;
+    const pendente = temAlteracoesSoltas();
+    seloEstado.className = `selo ${pendente ? 'pendente' : 'contagem'}`;
+    seloEstado.textContent = salvo ? `Meu tema: ${salvo.nome}` : (n ? `${base}, com alterações` : base);
+    if (salvo && !pendente) return caixaSalvar.replaceChildren(h('div', { class: 'caixa-salvar' },
+      h('div', { class: 'caixa-titulo' }, h('strong', {}, salvo.nome), h('span', { class: 'selo obs' }, 'salvo')),
+      h('p', {}, `Tema seu, criado a partir de ${base}. O que você alterar aqui poderá ser salvo neste tema ou em um novo.`)));
+    if (salvo) return caixaSalvar.replaceChildren(h('div', { class: 'caixa-salvar' },
+      h('div', { class: 'caixa-titulo' }, h('strong', {}, salvo.nome), h('span', { class: 'selo pendente' }, 'alterações não salvas')),
+      h('p', {}, 'Você mudou este tema depois de salvar. Atualize o tema salvo ou guarde a nova combinação com outro nome.'),
+      h('div', { class: 'acoes' },
+        botao('Salvar alterações', () => { Object.assign(salvo, copiar(soEscolha(estado.tema))); atualizar(true); aviso(`Tema "${salvo.nome}" atualizado.`); }, 'primario'),
+        botao('Salvar como novo tema', () => pedirNome('Salvar como novo tema', '', 'Salvar tema', null, salvarNovo), 'contorno'),
+        botao('Descartar alterações', () => { escolherTemaSalvo(salvo.uid); atualizar(true); }))));
+    if (!n) return caixaSalvar.replaceChildren(h('p', { class: 'ajuda' }, 'Altere cores, tipografia ou elementos para criar um tema seu. Depois, salve a combinação com um nome para voltar a ela quando quiser.'));
+    const entrada = h('input', { type: 'text', maxlength: MAX_NOME_TEMA, value: nomeRascunho, placeholder: 'Ex.: Grafite com magenta', oninput: e => { nomeRascunho = e.target.value; } });
+    const salvar = () => { const msg = erroNomeTema(entrada.value); if (msg) { aviso(msg, 'erro'); entrada.focus(); return; } salvarNovo(entrada.value.trim()); };
+    entrada.addEventListener('keydown', e => { if (e.key === 'Enter') salvar(); });
+    caixaSalvar.replaceChildren(
+      h('div', { class: 'caixa-salvar' },
+        h('div', { class: 'caixa-titulo' }, h('strong', {}, 'Salvar como meu tema'), h('span', { class: 'selo pendente' }, 'ainda não salvo')),
+        h('p', {}, `Você alterou ${n} ${n === 1 ? 'item' : 'itens'} do tema ${base}. Dê um nome para guardar esta combinação e voltar a ela quando quiser.`),
+        h('div', { class: 'linha-nome' }, h('label', {}, 'Nome do tema', entrada), botao('Salvar tema', salvar, 'primario'))),
+      h('div', { class: 'acoes' }, botao(`Descartar alterações e voltar ao ${base}`, () => { escolherTemaBase(estado.tema.id); nomeRascunho = ''; atualizar(true); }, 'fantasma')));
+  };
   const atualizar = (redesenharPainel = false, salvar = true) => {
     const tema = temaAtual();
     previa.replaceChildren(montarSlide(construir(c, tema).slides[slidePrev], tema));
     const pares = [['Texto sobre o fundo', tema.cores.texto, tema.cores.fundo], ['Texto sobre cartões', tema.cores.texto, tema.cores.superficie], ['Texto sobre a cor principal', tema.cores.sobrePrimaria, tema.cores.primaria], ['Texto secundário', tema.cores.suave, tema.cores.fundo]];
     contr.replaceChildren(...pares.map(([n, a, b]) => { const r = contraste(a, b); return h('span', { class: `selo ${r >= 4.5 ? 'obs' : 'alerta'}`, title: 'Razão de contraste (recomendado: 4,5 ou mais)' }, `${n}: ${fmt(r, 1)}:1 ${r >= 4.5 ? '✓' : '— baixo'}`); }));
-    if (redesenharPainel) { desenharGaleria(); desenharEditor(); }
+    if (redesenharPainel) { desenharMeus(); desenharGaleria(); desenharEditor(); }
+    desenharSalvar();
     if (salvar) mudou();
   };
   const desenharGaleria = () => galeria.replaceChildren(...TEMAS.map(t => {
-    const mini = montarSlide(construir(c, resolverTema({ id: t.id })).slides[2], resolverTema({ id: t.id }), 'mini');
-    return h('button', { class: `tema-cartao ${temaAtual().id === t.id ? 'ativo' : ''}`, 'aria-pressed': String(temaAtual().id === t.id), onclick: () => { estado.tema = { id: t.id }; atualizar(true); } },
-      mini, h('strong', {}, t.nome), h('span', {}, t.descricao),
-      h('div', { class: 'amostras' }, ['primaria', 'destaque', 'fundo', 'texto', 'favoravel', 'adverso'].map(k => h('i', { style: `background:${t.cores[k]}` }))));
+    const ativo = !temaSalvoAtual() && temaAtual().id === t.id;
+    return h('button', { class: `tema-cartao ${ativo ? 'ativo' : ''}`, 'aria-pressed': String(ativo), onclick: () => { if (!confirmarTroca()) return; escolherTemaBase(t.id); nomeRascunho = ''; atualizar(true); } },
+      mini({ id: t.id }), h('strong', {}, t.nome), h('span', {}, t.descricao), amostras(t.cores));
   }));
   const desenharEditor = () => {
     const tema = temaAtual();
@@ -598,16 +713,16 @@ function vistaTema() {
       h('h3', {}, 'Tipografia'), h('div', { class: 'grade-2' }, sel('Títulos', 'fontes', 'titulo', FONTES_TIPO.map(f => [f.id, f.nome])), sel('Texto', 'fontes', 'corpo', FONTES_TIPO.map(f => [f.id, f.nome]))),
       h('h3', {}, 'Elementos'), h('div', { class: 'grade-3' }, sel('Cabeçalho', 'el', 'cabecalho', OPCOES_ELEMENTOS.cabecalho), sel('Cartões', 'el', 'cartao', OPCOES_ELEMENTOS.cartao), sel('Decoração', 'el', 'deco', OPCOES_ELEMENTOS.deco)),
       h('label', { class: 'campo' }, `Arredondamento dos cantos: ${tema.el.raio}px`, h('input', { type: 'range', min: 0, max: 24, step: 1, value: tema.el.raio, oninput: e => { garantir('el').raio = Number(e.target.value); e.target.parentElement.firstChild.textContent = `Arredondamento dos cantos: ${e.target.value}px`; atualizar(); } })),
-      h('div', { class: 'chaves' }, chave('Rodapé', 'rodape'), chave('Numeração dos slides', 'numeracao'), chave('Fontes no rodapé', 'fontes'), chave('Títulos em caixa alta', 'caixaAlta')),
-      h('div', { class: 'acoes' }, botao('Restaurar o tema original', () => { estado.tema = { id: tema.id }; atualizar(true); }, 'fantasma')));
+      h('div', { class: 'chaves' }, chave('Rodapé', 'rodape'), chave('Numeração dos slides', 'numeracao'), chave('Fontes no rodapé', 'fontes'), chave('Títulos em caixa alta', 'caixaAlta')));
   };
-  desenharGaleria(); desenharEditor(); atualizar(false, false);
+  desenharMeus(); desenharGaleria(); desenharEditor(); atualizar(false, false);
   return h('div', { class: 'vista larga' },
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Aparência dos slides'), h('h1', {}, 'Tema visual'),
       h('p', { class: 'lead' }, 'Escolha um dos dez temas e personalize cores, tipografia e elementos. A escolha vale apenas para os slides: na tela, no modo de apresentação e nos arquivos PPTX e PDF exportados. A aparência do aplicativo não muda.')),
+    h('section', { class: 'cartao' }, tituloMeus, meus),
     h('section', { class: 'cartao' }, h('h2', {}, 'Dez temas'), galeria),
     h('div', { class: 'tema-dupla' },
-      h('section', { class: 'cartao' }, h('h2', {}, 'Personalização'), painelEd),
+      h('section', { class: 'cartao' }, h('h2', {}, 'Personalização ', seloEstado), painelEd, caixaSalvar),
       h('section', { class: 'cartao fixo' },
         h('div', { class: 'cab-linha' }, h('h2', {}, 'Pré-visualização'), (() => { const s = h('select', { 'aria-label': 'Slide da pré-visualização', onchange: e => { slidePrev = Number(e.target.value); atualizar(); } }, TITULOS.map((t, i) => h('option', { value: i }, `Slide ${i + 1}`))); s.value = slidePrev; return s; })()),
         previa, h('h3', {}, 'Legibilidade'), contr)));
@@ -674,10 +789,15 @@ function vistaTurma() {
       comTema.length ? [
         contagem.length ? h('div', { class: 'turma-dist' }, barrasGrupos([{ nome: 'Temas base escolhidos (participantes)', itens: contagem }], { casas: 0 })) : null,
         h('div', { class: 'tabela-rolagem' }, h('table', { class: 'tabela custom' },
-          h('thead', {}, h('tr', {}, ['Participante', 'Tema base', 'Índice', 'Paleta', 'Tipografia', 'Elementos', 'Prévia'].map(t => h('th', {}, t)))),
+          h('thead', {}, h('tr', {}, ['Participante', 'Tema', 'Índice', 'Paleta', 'Tipografia', 'Elementos', 'Prévia'].map(t => h('th', {}, t)))),
           h('tbody', {}, comTema.map(l => { const ic = l.ic, e = ic.res.el; return h('tr', {},
             h('td', {}, h('strong', {}, l.nome || l.email)),
-            h('td', {}, ic.base.nome),
+            h('td', {}, (() => {
+              const salvos = Array.isArray(l.tema.salvos) ? l.tema.salvos.filter(x => x && typeof x.nome === 'string') : [];
+              const emUso = salvos.find(x => x.uid === l.tema.meu);
+              return [emUso ? [h('strong', {}, emUso.nome), h('div', { class: 'nota' }, `tema próprio, a partir de ${ic.base.nome}`)] : ic.base.nome,
+                salvos.length ? h('div', { class: 'nota' }, salvos.length === 1 ? '1 tema salvo' : `${salvos.length} temas salvos`) : null];
+            })()),
             h('td', { class: 'num' }, `${ic.pct}%`, h('div', { class: 'nota' }, `${ic.n} de ${ATRIBUTOS_TEMA}`)),
             h('td', {}, h('div', { class: 'amostras grandes' }, Object.keys(ROTULOS_CORES).map(k => amostra(ic, k)))),
             h('td', {}, marca(ic, 'fontes', 'titulo', `Títulos: ${nomeFonte(ic.res.fontes.titulo)}`), h('br'), marca(ic, 'fontes', 'corpo', `Texto: ${nomeFonte(ic.res.fontes.corpo)}`)),
@@ -749,7 +869,7 @@ async function iniciarSessao() {
     estado.admin = admin;
     api.registrarAcesso();
     estado.caso = normalizar(registro?.dados);
-    estado.tema = registro?.tema && registro.tema.id ? registro.tema : { id: 'executivo' };
+    estado.tema = normalizarTema(registro?.tema);
     if (!estado.caso.ident.aluno) estado.caso.ident.aluno = api.usuario()?.user_metadata?.nome || '';
   } catch (e) {
     if (api.remoto && /sess[aã]o/i.test(e.message)) return telaAcesso('entrar', e.message);
