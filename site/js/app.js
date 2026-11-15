@@ -4,8 +4,8 @@ import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } 
 import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste, luminancia, misturar } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
-  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea } from './modelo.js';
-import { construir, exportarPptx, notasApresentador, renderHTML, TITULOS } from './slides.js';
+  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea, quadro, SETA } from './modelo.js';
+import { construir, exportarPptx, notasApresentador, renderHTML, paginaDoSlide, TITULOS } from './slides.js';
 import { explorador } from './explorador.js';
 import * as ed from './edicoes.js';
 
@@ -102,6 +102,16 @@ async function prepararEdicoes(casoJaExistia) {
   }
   estado.origemDados = ed.estadoEdicoes.origem === 'supabase' ? 'supabase' : 'arquivo';
   inferirOrigens(c);
+  atualizarLeituras(c);
+}
+// A tendência que o aplicativo sugeriu e o autor não alterou passa a ser a leitura do quadro (hoje, projeção e revisão).
+// Texto escrito ou editado pelo autor nunca é trocado.
+function atualizarLeituras(c) {
+  for (const v of c.variaveis) {
+    if (!v.origem || v.origem.tend === undefined || v.tendencia !== v.origem.tend) continue;
+    const l = quadro(v).leitura;
+    if (l && l !== v.tendencia) { v.tendencia = l; v.origem.tend = l; }
+  }
 }
 // Evidências registradas antes de o aplicativo guardar a origem: reconhece as que vieram do Focus ou da Carta pela fonte e pela data.
 function inferirOrigens(c) {
@@ -414,7 +424,7 @@ function faixaOrigem(v, cat) {
     area.replaceChildren(h('div', { class: 'faixa-origem antiga' },
       h('span', {}, `Este dado veio ${f ? 'do Focus de' : 'da Carta'} `, h('strong', {}, deOrigem?.rotulo || v.publicacao), ` (${v.dado}, ${v.periodo}). ${f ? 'No Focus de' : 'Na Carta'} ${atual?.rotulo || ''}, ${igual ? 'o valor para o mesmo período continua em ' : `${f ? 'a mediana' : 'o valor'} para o mesmo período é `}`, h('strong', {}, novo.dado), '.'),
       h('div', { class: 'acoes' },
-        botao('Atualizar este dado', () => { const manteve = aplicarEvidencia(v, novo, { auto: o.auto }); redesenhar(); aviso(manteve ? 'Dado atualizado. O texto de tendência é seu e foi mantido: revise-o.' : 'Dado atualizado para a edição em uso.'); }, 'primario pequeno'),
+        botao('Atualizar este dado', () => { const manteve = aplicarEvidencia(v, novo, { auto: o.auto }); redesenhar(); aviso(manteve ? 'Dado atualizado. A leitura da tendência é sua e foi mantida: revise-a.' : 'Dado atualizado para a edição em uso.'); }, 'primario pequeno'),
         botao('Manter', () => { v.origem.mantida = atualId; mudou(); desenhar(); }, 'pequeno'))));
   };
   desenhar();
@@ -433,7 +443,7 @@ function abrirEscolha(v) {
   if (!ops.focus.length && !ops.ipea.length) return abrirBusca(v);
   const c = estado.caso, sug = sugestaoEvidencia(cat, c.ident);
   let fechar = () => {};
-  const usar = ev => { const manteve = aplicarEvidencia(v, ev); fechar(); redesenhar(); aviso(manteve ? 'Dado trocado. O texto de tendência é seu e foi mantido: revise-o.' : 'Dado trocado, com fonte, data e período.'); };
+  const usar = ev => { const manteve = aplicarEvidencia(v, ev); fechar(); redesenhar(); aviso(manteve ? 'Dado trocado. A leitura da tendência é sua e foi mantida: revise-a.' : 'Dado trocado, com fonte, data e período.'); };
   const opcao = (periodo, ev, obs, nota) => {
     const emUso = mesmaOrigem(v.origem, ev) && v.dado === ev.dado;
     return h('button', { class: `opcao-dado ${emUso ? 'ativo' : ''}`, 'aria-pressed': String(emUso), onclick: () => (emUso ? fechar() : usar(ev)) },
@@ -476,6 +486,24 @@ function roteiro(v) {
     h('p', { class: 'ajuda' }, 'Roteiro didático genérico, que não provém das fontes. Adapte-o à realidade da empresa antes de usar.'),
     h('div', { class: 'grade-2' }, [['sobe', 'Se a variável sobe'], ['cai', 'Se a variável cai']].map(([k, t]) => h('div', {}, h('strong', {}, t), h('p', {}, h('em', {}, 'Cliente: '), cat[k].cliente), h('p', {}, h('em', {}, 'Vendas: '), cat[k].vendas)))));
 }
+// Quadro da variável: dado observado, projeção e revisão da projeção, lado a lado (os mesmos blocos do slide 2).
+function blocoQuadroEl(titulo, natureza, classe, b, vazio) {
+  return h('div', { class: `q-bloco ${b ? '' : 'vazio'}` },
+    selo(natureza, classe), h('strong', { class: 'q-tit' }, titulo),
+    h('span', { class: 'q-valor' }, b ? b.valor : '—'),
+    b?.dir && b.delta ? h('span', { class: 'q-delta' }, h('span', { class: 'q-seta', 'aria-hidden': 'true' }, SETA[b.dir]), b.delta) : null,
+    h('span', { class: 'q-leg' }, b ? b.longa : vazio));
+}
+function quadroVariavel(v) {
+  const q = quadro(v);
+  if (!q.temQuadro) return null;
+  return h('div', { class: 'quadro' },
+    h('div', { class: 'cab-linha' }, h('h4', {}, 'O que os números dizem'), h('span', { class: 'ajuda' }, 'Estes três blocos vão para o slide 2 como estão.')),
+    h('div', { class: 'q-grade' },
+      blocoQuadroEl('Onde está hoje', 'Dado observado', 'obs', q.hoje, 'Ainda não há dado observado carregado para esta variável.'),
+      blocoQuadroEl('Para onde deve ir', 'Projeção publicada', 'proj', q.proj, 'O dado registrado não é uma projeção publicada.'),
+      blocoQuadroEl('A previsão mudou?', 'Projeção publicada', 'proj', q.rev, q.proj ? 'Sem edição anterior carregada para comparar.' : 'Não se aplica.')));
+}
 function cartaoVariavel(v, i) {
   const c = estado.caso;
   const cat = catalogo(v.tipo);
@@ -484,6 +512,7 @@ function cartaoVariavel(v, i) {
   const tipoAntes = v.tipo;
   const faixa = ext ? null : faixaOrigem(v, cat);
   const manual = () => { faixa?.esquecer(); mudou(); };
+  const rastreioCompleto = ['dado', 'natureza', 'fonte', 'publicacao', 'periodo'].every(k => String(v[k] || '').trim());
   return h('section', { class: `cartao variavel ${ext ? 'externa' : ''}` },
     h('div', { class: 'cab-linha' }, h('h3', {}, `Variável ${i + 1}`, v.nome ? ` — ${v.nome}` : '', ext ? selo('Fonte externa', 'externa') : null),
       h('div', { class: 'acoes' }, ext ? null : botao(temSerie ? (v.dado ? 'Escolher outro dado' : 'Escolher dado') : 'Buscar no Focus ou no Ipea', () => abrirEscolha(v), temSerie && v.dado ? 'contorno pequeno' : 'primario pequeno'),
@@ -497,21 +526,29 @@ function cartaoVariavel(v, i) {
       C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...GRUPOS.flatMap(g => variaveisDoGrupo(g.id).map(x => [x.id, `${g.nome} — ${x.nome}${x.externa ? ' (fonte externa)' : ''}`])), ['outra', 'Outra variável']], aoMudar: (val, e) => trocarTipo(v, tipoAntes, val, e.target) }),
       C({ rotulo: 'Nome da variável', obj: v, chave: 'nome', tipo: 'text', placeholder: 'Ex.: Taxa de juros (Selic)' }),
       C({ rotulo: 'Unidade', obj: v, chave: 'unidade', tipo: 'text', placeholder: '%, % a.a., R$/US$…' })),
-    h('div', { class: 'grade-2' },
-      C({ rotulo: 'Dado ou projeção / unidade', obj: v, chave: 'dado', tipo: 'text', placeholder: 'Ex.: 13,25 % a.a.', aoMudar: val => { v.valorNum = numSimples(String(val).match(/-?\d+(?:[.,]\d+)?/)?.[0]); manual(); } }),
-      C({ rotulo: 'Natureza da informação', obj: v, chave: 'natureza', tipo: 'select', opcoes: [['', 'Selecione…'], ...NATUREZAS] })),
-    h('div', { class: 'grade-3' },
-      C({ rotulo: 'Fonte / título', obj: v, chave: 'fonte', tipo: 'text', placeholder: 'Publicação e instituição', aoMudar: manual }),
-      C({ rotulo: 'Data de publicação', obj: v, chave: 'publicacao', tipo: 'text', placeholder: 'Ex.: 23 de outubro de 2026', aoMudar: manual }),
-      C({ rotulo: 'Período de referência', obj: v, chave: 'periodo', tipo: 'text', placeholder: 'Ex.: fim de 2027', aoMudar: manual })),
-    C({ rotulo: 'Tendência e evidência de sustentação', ajuda: 'O que o dado indica (alta, queda, estabilidade) e que evidência sustenta essa leitura.', obj: v, chave: 'tendencia' }),
+    vivo(() => quadroVariavel(v)),
+    C({ rotulo: 'Leitura da tendência', ajuda: 'O que os números indicam (alta, queda, estabilidade), em uma frase. Ela aparece no slide 2, logo abaixo dos números.', obj: v, chave: 'tendencia', linhas: 2 }),
+    vivo(() => {
+      const l = quadro(v).leitura;
+      return l && String(v.tendencia || '').trim() !== l ? h('div', { class: 'faixa-origem sugestao' }, h('span', {}, h('span', { class: 'selo contagem' }, 'Leitura sugerida'), l),
+        botao('Usar a sugestão', () => { v.tendencia = l; if (v.origem) v.origem.tend = l; mudou(); redesenhar(); }, 'fantasma pequeno')) : null;
+    }),
     C({ rotulo: 'Implicação para o mercado da empresa', ajuda: 'Como essa variável afeta os clientes e o desempenho comercial da empresa analisada.', obj: v, chave: 'implicacao' }),
-    roteiro(v));
+    roteiro(v),
+    h('details', { class: 'roteiro rastreio', open: ext || !v.origem || !rastreioCompleto },
+      h('summary', {}, 'Fonte e rastreio do dado', rastreioCompleto ? h('span', { class: 'resumo-rastreio' }, [v.dado, v.natureza, v.fonte, v.publicacao, v.periodo].join(' · ')) : h('span', { class: 'resumo-rastreio pendente' }, 'preencha o dado, a natureza, a fonte, a data e o período')),
+      h('div', { class: 'grade-2' },
+        C({ rotulo: 'Dado ou projeção / unidade', obj: v, chave: 'dado', tipo: 'text', placeholder: 'Ex.: 13,25 % a.a.', aoMudar: val => { v.valorNum = numSimples(String(val).match(/-?\d+(?:[.,]\d+)?/)?.[0]); manual(); } }),
+        C({ rotulo: 'Natureza da informação', obj: v, chave: 'natureza', tipo: 'select', opcoes: [['', 'Selecione…'], ...NATUREZAS] })),
+      h('div', { class: 'grade-3' },
+        C({ rotulo: 'Fonte / título', obj: v, chave: 'fonte', tipo: 'text', placeholder: 'Publicação e instituição', aoMudar: manual }),
+        C({ rotulo: 'Data de publicação', obj: v, chave: 'publicacao', tipo: 'text', placeholder: 'Ex.: 23 de outubro de 2026', aoMudar: manual }),
+        C({ rotulo: 'Período de referência', obj: v, chave: 'periodo', tipo: 'text', placeholder: 'Ex.: fim de 2027', aoMudar: manual }))));
 }
 function etapa2() {
   const c = estado.caso;
   return h('div', { class: 'vista' }, cabecalhoEtapa(2),
-    h('p', { class: 'lead' }, 'Para cada variável, registre o dado ou a projeção encontrada, a tendência, a relação com o mercado da empresa, a fonte, a data de publicação e o período de referência. Diferencie dados observados, projeções publicadas e hipóteses.'),
+    h('p', { class: 'lead' }, 'Para cada variável, confira onde ela está hoje, para onde deve ir e se a previsão mudou; depois escreva a leitura da tendência e a relação com o mercado da empresa. A fonte, a data de publicação e o período de referência ficam registrados em cada cartão. Diferencie dados observados, projeções publicadas e hipóteses.'),
     cartaoEdicoes(),
     c.variaveis.map(cartaoVariavel),
     h('div', { class: 'acoes' }, botao('+ Adicionar variável', () => { c.variaveis.push(novaVariavel()); mudou(); redesenhar(); }, 'fantasma')),
@@ -681,10 +718,10 @@ function apresentar(inicio = 0) {
   const sairApres = () => { document.removeEventListener('keydown', tecla); window.removeEventListener('resize', mostrar); if (document.fullscreenElement) document.exitFullscreen?.(); tela.remove(); };
   const tecla = e => {
     if (e.key === 'Escape') sairApres();
-    else if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { i = Math.min(4, i + 1); mostrar(); e.preventDefault(); }
+    else if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { i = Math.min(slidesEls.length - 1, i + 1); mostrar(); e.preventDefault(); }
     else if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { i = Math.max(0, i - 1); mostrar(); e.preventDefault(); }
   };
-  tela.addEventListener('click', e => { i = e.clientX > window.innerWidth / 2 ? Math.min(4, i + 1) : Math.max(0, i - 1); mostrar(); });
+  tela.addEventListener('click', e => { i = e.clientX > window.innerWidth / 2 ? Math.min(slidesEls.length - 1, i + 1) : Math.max(0, i - 1); mostrar(); });
   document.addEventListener('keydown', tecla); window.addEventListener('resize', mostrar);
   document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && tela.isConnected && tela.dataset.cheia) sairApres(); });
   document.body.append(tela);
@@ -724,10 +761,10 @@ function vistaSlides() {
   };
   const desenhar = () => {
     const tema = temaAtual();
-    const { slides, blocos, alertas } = construir(c, tema);
+    const { slides, paginas, blocos, alertas } = construir(c, tema);
     desenharAlertas(alertas);
     area.replaceChildren(...slides.map((els, i) => {
-      const meus = blocos.filter(b => b.slide === i + 1);
+      const meus = blocos.filter(b => b.pag === i), pg = paginas[i];
       const painelTxt = h('div', { class: 'editor-textos' },
         h('p', { class: 'ajuda' }, 'Edite aqui a versão resumida para o slide. O texto completo do caso não é alterado.'),
         meus.map(b => {
@@ -736,7 +773,7 @@ function vistaSlides() {
             b.editado ? botao('Restaurar o texto do caso', () => { delete c.slides.textos[b.key]; mudou(); desenhar(); }, 'fantasma pequeno') : null);
         }));
       return h('section', { class: 'slide-item' },
-        h('div', { class: 'cab-linha' }, h('h2', {}, `Slide ${i + 1} — ${TITULOS[i]}`),
+        h('div', { class: 'cab-linha' }, h('h2', {}, `Slide ${pg.n} — ${TITULOS[pg.n - 1]}${pg.partes > 1 ? ` · parte ${pg.parte}/${pg.partes}` : ''}`),
           h('div', { class: 'acoes' }, botao(aberto.has(i) ? 'Fechar edição' : 'Editar textos do slide', () => { aberto.has(i) ? aberto.delete(i) : aberto.add(i); desenhar(); }, 'fantasma pequeno'), botao('Apresentar daqui', () => apresentar(i), 'fantasma pequeno'))),
         h('div', { class: aberto.has(i) ? 'slide-edicao' : '' }, montarSlide(els, tema), aberto.has(i) ? painelTxt : null));
     }));
@@ -751,7 +788,7 @@ function vistaSlides() {
   desenhar();
   return h('div', { class: 'vista larga' },
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Entrega final'), h('h1', {}, 'Apresentação em cinco slides'),
-      h('p', { class: 'lead' }, 'Os slides são gerados a partir do caso: (1) empresa e características comerciais; (2) indicadores pesquisados no Focus e no Ipea; (3) cenários base, favorável e adverso; (4) impactos sobre clientes e vendas; (5) três decisões comerciais justificadas.')),
+      h('p', { class: 'lead' }, 'Os slides são gerados a partir do caso: (1) empresa e características comerciais; (2) indicadores pesquisados no Focus e no Ipea; (3) cenários base, favorável e adverso; (4) impactos sobre clientes e vendas; (5) três decisões comerciais justificadas. Com cinco ou mais variáveis, os slides 2, 3 e 4 se dividem em duas partes para manter o texto legível.')),
     h('div', { class: 'barra-slides' },
       h('label', {}, 'Tema ', seletorTema()), botao('Personalizar tema', () => ir('tema'), 'fantasma'),
       h('span', { class: 'espaco' }),
@@ -790,7 +827,7 @@ function vistaTema() {
   const seloEstado = h('span', {});
   let nomeRascunho = '';
   const garantir = k => (estado.tema[k] ||= {});
-  const mini = t => montarSlide(construir(c, resolverTema(t)).slides[2], resolverTema(t), 'mini');
+  const mini = t => { const r = construir(c, resolverTema(t)); return montarSlide(r.slides[paginaDoSlide(r, 3)], resolverTema(t), 'mini'); };
   const amostras = cores => h('div', { class: 'amostras' }, ['primaria', 'destaque', 'fundo', 'texto', 'favoravel', 'adverso'].map(k => h('i', { style: `background:${cores[k]}` })));
   // Pede um nome em uma janela (usado em "Salvar como novo tema" e "Renomear").
   const pedirNome = (titulo, inicial, rotuloBotao, ignorarUid, aoConfirmar) => {
@@ -856,7 +893,8 @@ function vistaTema() {
   };
   const atualizar = (redesenharPainel = false, salvar = true) => {
     const tema = temaAtual();
-    previa.replaceChildren(montarSlide(construir(c, tema).slides[slidePrev], tema));
+    const res = construir(c, tema);
+    previa.replaceChildren(montarSlide(res.slides[paginaDoSlide(res, slidePrev + 1)], tema));
     const pares = [['Texto sobre o fundo', tema.cores.texto, tema.cores.fundo], ['Texto sobre cartões', tema.cores.texto, tema.cores.superficie], ['Texto sobre a cor principal', tema.cores.sobrePrimaria, tema.cores.primaria], ['Texto secundário', tema.cores.suave, tema.cores.fundo],
       // Valores de cada cenário no slide 3: a cor do cenário, como o gerador de slides a aplica sobre os cartões.
       ...[['base', 'Valores do cenário base'], ['favoravel', 'Valores do cenário favorável'], ['adverso', 'Valores do cenário adverso']].map(([k, n]) => {
@@ -1014,7 +1052,7 @@ function vistaTurma() {
             h('td', {}, marca(ic, 'fontes', 'titulo', `Títulos: ${nomeFonte(ic.res.fontes.titulo)}`), h('br'), marca(ic, 'fontes', 'corpo', `Texto: ${nomeFonte(ic.res.fontes.corpo)}`)),
             h('td', { class: 'elementos' }, marca(ic, 'el', 'cabecalho', rotuloOp('cabecalho', e.cabecalho)), ' · ', marca(ic, 'el', 'cartao', `cartões: ${rotuloOp('cartao', e.cartao).toLowerCase()}`), ' · ', marca(ic, 'el', 'deco', `decoração: ${rotuloOp('deco', e.deco).toLowerCase()}`), ' · ', marca(ic, 'el', 'raio', `cantos ${e.raio}px`),
               h('br'), [['rodape', 'rodapé'], ['numeracao', 'numeração'], ['fontes', 'fontes no rodapé'], ['caixaAlta', 'caixa alta']].map(([k, t], i) => [i ? ' · ' : '', marca(ic, 'el', k, `${t}: ${e[k] ? 'sim' : 'não'}`)])),
-            h('td', { class: 'previa-mini' }, montarSlide(construir(estado.caso, ic.res).slides[2], ic.res, 'mini'))); })))),
+            h('td', { class: 'previa-mini' }, (() => { const r = construir(estado.caso, ic.res); return montarSlide(r.slides[paginaDoSlide(r, 3)], ic.res, 'mini'); })())); })))),
       ] : h('p', {}, 'Nenhum participante salvou um caso ainda.'));
 
     corpo.replaceChildren(

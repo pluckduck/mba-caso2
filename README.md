@@ -33,6 +33,12 @@ Não exige nova publicação do site:
 2. `node scripts/gerar-edicoes.mjs <id>` gera o SQL da edição; executá-lo no Supabase.
 3. `npm run edicoes` atualiza `supabase/edicoes.sql` (todas as edições), para manter o repositório em dia.
 
+### Dados observados ("onde está hoje")
+
+O quadro de cada variável compara a projeção com o último valor medido (Selic, PTAX, IPCA em 12 meses, PIB e FBCF), na data da edição do relatório em uso no caso. Esses valores ficam na tabela `observados` (migração `005_observados.sql`), com cópia embutida em `OBSERVADOS` (`site/js/refdata.js`), usada no modo local ou enquanto a tabela não existir.
+
+Para carregar um valor novo: acrescente a linha em `OBSERVADOS`, rode `npm run observados` (atualiza `supabase/observados.sql`) e execute esse SQL no banco. Séries diárias (Selic e PTAX) precisam também do valor de quatro semanas antes da data da edição, que é a janela de comparação.
+
 A edição de 23/10/2026 e a Carta nº 71 também ficam em `site/js/refdata.js`, como reserva para o modo local ou para falha do banco. As tabelas `fontes_referencia`, `focus_expectativas` e `ipea_indicadores` (e `supabase/seed.sql`) pertencem à versão anterior do site e deixam de ser lidas pela versão atual.
 
 ## Arquitetura
@@ -45,7 +51,7 @@ Com `site/js/config.js` vazio, o aplicativo roda em **modo local**: sem login, c
 
 ## Implantação
 
-1. **Supabase**: aplicar `supabase/migrations/001_esquema.sql`, `002_admin.sql` e `003_edicoes.sql`, e depois `supabase/edicoes.sql`; publicar a função `supabase/functions/cadastro` com `verify_jwt = false`; cadastrar um código da turma:
+1. **Supabase**: aplicar `supabase/migrations/001_esquema.sql`, `002_admin.sql`, `003_edicoes.sql`, `004_permissoes.sql` e `005_observados.sql`, e depois `supabase/edicoes.sql` e `supabase/observados.sql`; publicar a função `supabase/functions/cadastro` com `verify_jwt = false`; cadastrar um código da turma:
    ```sql
    insert into public.codigos_turma (codigo) values ('ESCOLHA-UM-CODIGO');
    ```

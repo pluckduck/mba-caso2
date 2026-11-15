@@ -1,5 +1,5 @@
 // Modelo do caso: espelha as cinco seções do roteiro do Estudo de Caso 2 e os critérios de validação da entrega.
-import { VARIAVEIS, FOCUS, IPEA, fmt, comUnidade, valorIpea } from './refdata.js';
+import { VARIAVEIS, FOCUS, IPEA, SERIES_OBS, OBSERVADOS, fmt, comUnidade, valorIpea } from './refdata.js';
 
 export const CENARIOS = [
   { id: 'base', nome: 'Cenário base', curto: 'Base', desc: 'Evolução considerada mais provável, fundamentada nas expectativas consultadas.' },
@@ -198,13 +198,122 @@ export function progresso(itens) {
   return { porEtapa, total, ok, pct: total ? Math.round((ok / total) * 100) : 0 };
 }
 
+// ---------- Quadro "onde está hoje, para onde deve ir, a previsão mudou?" ----------
+// Para cada variável, reúne o dado observado mais recente na data da edição do relatório, a projeção registrada e a
+// revisão dessa projeção (quatro semanas no Focus; Carta anterior no Ipea). Cada bloco traz a direção, a diferença e
+// as legendas; "leitura" é a frase que traduz a combinação dos três para quem não é da área.
+const DIA_MS = 86400000;
+const menosDias = (iso, n) => new Date(new Date(`${iso}T12:00:00Z`).getTime() - n * DIA_MS).toISOString().slice(0, 10);
+export const dataCurta = iso => (iso ? `${Number(iso.slice(8, 10))}/${Number(iso.slice(5, 7))}` : '');
+export const serieDe = tipo => Object.keys(SERIES_OBS).find(k => SERIES_OBS[k].variavel === tipo) || null;
+export const SETA = { sobe: '▲', cai: '▼', estavel: '=' };
+const casasDoNum = n => Math.min(2, Math.max(1, String(n).split('.')[1]?.length || 0));
+const menos = s => String(s).replace(/(^|[\s(])-(?=\d)/g, '$1−');   // sinal de menos tipográfico, igual ao das diferenças
+const dirDe = (a, b) => (a === null || a === undefined || b === null || b === undefined ? null : Math.abs(a - b) < 1e-9 ? 'estavel' : a > b ? 'sobe' : 'cai');
+function deltaTxt(d, unidade, casas) {
+  const s = d > 0 ? '+' : '−', v = fmt(Math.abs(d), casas), u = String(unidade || '').trim();
+  if (u.startsWith('%') || /^varia/i.test(u)) return `${s}${v} p.p.`;
+  if (u === 'R$/US$') return `${s}R$ ${v}`;
+  if (/^(R\$|US\$)/.test(u)) return `${s}${comUnidade(Math.abs(d), u, casas)}`;
+  return `${s}${v}${u ? ' ' + u : ''}`;
+}
+
+// Valor observado de uma série na data informada (só o que já estava divulgado) e o valor de comparação.
+export function observadoEm(serie, data) {
+  const meta = SERIES_OBS[serie];
+  if (!meta || !data) return null;
+  const visiveis = OBSERVADOS.filter(r => r.serie === serie && (r.disponivel_em || r.data) <= data).sort((a, b) => a.data.localeCompare(b.data));
+  const atual = visiveis.at(-1);
+  if (!atual) return null;
+  const anterior = meta.modo === 'nivel' ? (visiveis.filter(r => r.data <= menosDias(data, 28)).at(-1) || null) : (visiveis.at(-2) || null);
+  return { meta, atual, anterior };
+}
+
+function leituraDe(proj, rev, cat, fonte) {
+  if (!proj) return '';
+  const verbo = cat?.grupo === 'atividade' ? { sobe: 'acelerar', cai: 'desacelerar' } : { sobe: 'subir', cai: 'cair' };
+  const ipea = fonte === 'ipea';
+  const desde = ipea ? 'desde a Carta anterior' : 'em um mês';
+  const sentido = d => (d === 'sobe' ? 'cima' : 'baixo');
+  const r = rev?.dir || null;
+  if (!proj.dir) {
+    if (!r) return '';
+    return r === 'estavel' ? `A previsão não mudou ${desde}.` : `A previsão foi revisada para ${sentido(r)} ${desde}.`;
+  }
+  const a = proj.dir === 'estavel' ? 'Deve ficar no nível de hoje' : `Deve ${verbo[proj.dir]} em relação a hoje`;
+  if (!r) return `${a}.`;
+  if (r === 'estavel') return `${a}, e a previsão não mudou ${desde}.`;
+  if (proj.dir === 'estavel') return `${a}; a previsão foi revisada para ${sentido(r)} ${desde}.`;
+  if (r === proj.dir) return ipea ? `${a}, e a previsão foi revisada para ${sentido(r)} ${desde}.` : `${a}, e a previsão vem sendo revisada para ${sentido(r)}.`;
+  return `${a}, mas menos do que se previa ${ipea ? 'na Carta anterior' : 'há um mês'}.`;
+}
+
+export function quadro(v) {
+  const cat = catalogo(v.tipo), o = v.origem || null;
+  const unidade = v.unidade || cat?.unidade || '';
+  const dataRef = o?.fonte === 'ipea' ? IPEA.data : FOCUS.data;
+  const serie = cat ? serieDe(cat.id) : null;
+  const obs = serie ? observadoEm(serie, dataRef) : null;
+  const num = numSimples(v.valorNum);
+  const ehProj = v.natureza === 'Projeção publicada' && num !== null;
+
+  let hoje = null;
+  if (obs) {
+    const { meta, atual, anterior } = obs, nivel = meta.modo === 'nivel';
+    const dir = dirDe(atual.valor, anterior?.valor);
+    hoje = { num: atual.valor, valor: menos(comUnidade(atual.valor, meta.unidade, meta.casas)), dir,
+      delta: !dir ? '' : dir === 'estavel' ? (nivel ? 'estável em 4 semanas' : 'estável') : `${deltaTxt(atual.valor - anterior.valor, meta.unidade, meta.casas)}${nivel ? ' em 4 semanas' : ''}`,
+      curta: `${atual.curto}${anterior ? ` · antes ${menos(fmt(anterior.valor, meta.casas))}` : ''}`,
+      longa: `${atual.rotulo}${anterior ? ` · era ${menos(fmt(anterior.valor, meta.casas))} ${nivel ? 'há 4 semanas' : `(${anterior.curto})`}` : ''} · fonte: ${meta.fonte}`,
+      medida: meta.nome, casas: meta.casas, unidade: meta.unidade };
+  } else if (v.natureza === 'Dado observado' && num !== null) {
+    hoje = { num, valor: v.dado || comUnidade(num, unidade, casasDoNum(num)), dir: null, delta: '', curta: v.periodo || '', longa: [v.periodo, v.fonte].filter(Boolean).join(' · '), medida: v.nome, casas: casasDoNum(num), unidade };
+  }
+
+  let proj = null, rev = null;
+  if (ehProj) {
+    const casasP = o?.fonte === 'focus' ? 2 : casasDoNum(num);
+    const comparavel = Boolean(obs);
+    const dir = comparavel ? dirDe(num, hoje.num) : null;
+    const casasD = comparavel ? Math.max(casasP, hoje.casas) : casasP;
+    const origemCurta = o?.fonte === 'focus' ? `Focus de ${dataCurta(FOCUS.data)}` : o?.fonte === 'ipea' ? `Carta nº ${IPEA.numero} (Ipea)` : '';
+    proj = { num, valor: v.dado || comUnidade(num, unidade, casasP), dir,
+      delta: !dir ? '' : dir === 'estavel' ? 'no nível de hoje' : `${deltaTxt(num - hoje.num, unidade, casasD)} em relação a hoje`,
+      deltaCurto: !dir ? '' : dir === 'estavel' ? 'igual a hoje' : deltaTxt(num - hoje.num, unidade, casasD),
+      curta: [origemCurta, v.periodo].filter(Boolean).join(' · '), longa: [v.fonte, v.publicacao, v.periodo].filter(Boolean).join(' · '), casas: casasP };
+
+    let ant = null, curta = '', longa = '';
+    if (o?.fonte === 'focus') {
+      const cel = (o.tipo === 'mensal' ? FOCUS.mensal : FOCUS.anual).find(x => x.id === o.indicador)?.v[o.periodo];
+      if (cel && Math.abs(cel.hoje - num) < 1e-9 && cel.h4 !== null && cel.h4 !== undefined) {
+        ant = cel.h4; curta = 'em 4 semanas';
+        longa = `${fmt(cel.h1, casasP)} há 1 semana · ${fmt(cel.h4, casasP)} há 4 semanas${cel.resp ? ` · ${cel.resp} respondentes` : ''}`;
+      }
+    } else if (o?.fonte === 'ipea' && IPEA.anterior && o.edicao === IPEA.edicao) {
+      const r = IPEA.anterior.registros.find(x => x.id === o.registro) || (o.chave ? IPEA.anterior.registros.find(x => x.chave === o.chave && (x.ano || null) === (o.ano || null)) : null);
+      if (r) { ant = r.valor; curta = IPEA.anterior.numero ? `vs. Carta nº ${IPEA.anterior.numero}` : 'vs. Carta anterior'; longa = `${fmt(r.valor, casasP)} na ${IPEA.anterior.curto}`; }
+    }
+    if (ant !== null) {
+      const dirR = dirDe(num, ant);
+      rev = { num: ant, valor: `era ${menos(fmt(ant, casasP))}`, dir: dirR, delta: dirR === 'estavel' ? 'sem alteração' : `${deltaTxt(num - ant, unidade, casasP)}${o.fonte === 'focus' ? ' em 4 semanas' : ' desde a Carta anterior'}`,
+        deltaCurto: dirR === 'estavel' ? 'sem alteração' : deltaTxt(num - ant, unidade, casasP), curta, longa };
+    }
+  }
+  return { hoje, proj, rev, leitura: leituraDe(proj, rev, cat, o?.fonte || null), temQuadro: Boolean(hoje || proj) };
+}
+// A tendência sugerida para um dado do Focus ou da Carta é a leitura do quadro; sem projeção para comparar, fica o texto descritivo.
+function comLeitura(ev) {
+  const l = quadro(ev).leitura;
+  return l ? { ...ev, tendencia: l } : ev;
+}
+
 // Monta o registro de evidência a partir de uma célula do Focus.
 export function evidenciaFocus(linha, periodo, tipoHorizonte) {
   const c = linha.v[periodo];
   const cat = VARIAVEIS.find(x => x.focus === linha.id) || null;
   const comp = { alta: 'revisão para cima', queda: 'revisão para baixo', estavel: 'estabilidade' }[c.comp];
   const perTxt = tipoHorizonte === 'anual' ? `fim de ${periodo}` : (periodo.startsWith('Infl') ? 'próximos 12 meses (suavizada)' : periodo);
-  return {
+  const ev = {
     tipo: cat?.id || 'outra',
     nome: cat?.nome || linha.indicador,
     dado: comUnidade(c.hoje, linha.unidade, linha.casas),
@@ -217,12 +326,13 @@ export function evidenciaFocus(linha, periodo, tipoHorizonte) {
     tendencia: `Mediana em ${fmt(c.hoje, linha.casas)} (hoje), ante ${fmt(c.h1, linha.casas)} há uma semana e ${fmt(c.h4, linha.casas)} há quatro semanas; ${comp} há ${c.sem} semana${c.sem > 1 ? 's' : ''} (${c.resp} respondentes).`,
     origem: { fonte: 'focus', edicao: FOCUS.edicao, tipo: tipoHorizonte, indicador: linha.id, periodo: String(periodo) },
   };
+  return comLeitura(ev);
 }
 
 // Monta o registro de evidência a partir de um indicador da Carta de Conjuntura do Ipea.
 export function evidenciaIpea(r) {
   const cat = (r.chave && VARIAVEIS.find(x => x.ipea === r.chave)) || null;
-  return {
+  const ev = {
     tipo: cat?.id || 'outra',
     nome: cat?.nome || r.indicador,
     dado: valorIpea(r),
@@ -232,9 +342,10 @@ export function evidenciaIpea(r) {
     fonte: `${IPEA.curtoNota} (Ipea), p. ${r.pagina}`,
     publicacao: IPEA.publicacao,
     periodo: r.periodo,
-    tendencia: `${r.indicador}${r.nota ? ': ' + r.nota : '.'}`,
+    tendencia: r.nota || `${r.indicador}.`,
     origem: { fonte: 'ipea', edicao: IPEA.edicao, registro: r.id, chave: r.chave || null, ano: r.ano || null },
   };
+  return comLeitura(ev);
 }
 
 // Ano que concentra o horizonte do caso (o que tem mais meses entre o início e o fim; em empate, o mais tardio).

@@ -141,6 +141,11 @@ export async function dadosRelatorio(fonte, id) {
   const tabela = fonte === 'focus' ? 'focus_dados' : 'ipea_dados';
   return chamar(`/rest/v1/${tabela}?select=*&relatorio_id=eq.${encodeURIComponent(id)}&order=ordem`);
 }
+// Valores observados (tabela observados). Retorna null se indisponíveis.
+export async function listarObservados() {
+  if (!remoto) return null;
+  try { return await chamar('/rest/v1/observados?select=*&order=serie,data'); } catch { return null; }
+}
 
 // ---------- Administração ----------
 export async function registrarAcesso() {

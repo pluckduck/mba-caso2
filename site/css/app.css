@@ -323,3 +323,18 @@ h2 .selo { margin-left: .4rem; vertical-align: middle; font-family: var(--f-corp
   #impressao .pagina { width: 1280px; height: 720px; overflow: hidden; break-after: page; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
+
+/* Quadro da variável (etapa 2): dado observado, projeção e revisão da projeção, lado a lado */
+.quadro { margin: .2rem 0 .9rem; }
+.quadro .cab-linha { margin-bottom: .4rem; } .quadro .cab-linha h4, .quadro .cab-linha .ajuda { margin: 0; }
+.q-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: .8rem; }
+.q-bloco { background: var(--tom); border-radius: var(--raio); padding: .8rem .9rem; display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.q-bloco .selo { align-self: flex-start; margin: 0 0 .1rem; background: var(--c-superficie); }
+.q-tit { font-size: .95rem; }
+.q-valor { font-family: var(--f-titulo); font-size: 1.6rem; font-weight: 700; line-height: 1.15; color: var(--c-primaria); font-variant-numeric: tabular-nums; }
+.q-bloco.vazio .q-valor { color: var(--c-suave); }
+.q-delta { display: flex; align-items: baseline; gap: .4rem; font-weight: 600; } .q-seta { font-size: .8rem; color: var(--c-primaria); }
+.q-leg { font-size: .84rem; color: var(--c-suave); overflow-wrap: anywhere; }
+.rastreio .resumo-rastreio { margin-left: .5rem; font-weight: 400; color: var(--c-suave); font-size: .84rem; overflow-wrap: anywhere; }
+.rastreio .resumo-rastreio.pendente { color: var(--c-adverso); }
+.rastreio[open] .resumo-rastreio { display: none; } .rastreio > .grade-2 { margin-top: .6rem; }

@@ -1,7 +1,7 @@
 // Edições dos relatórios de referência (Focus e Carta de Conjuntura do Ipea).
 // Mantém a lista de edições, carrega os dados da edição em uso e calcula o calendário de divulgação.
 // Os objetos FOCUS e IPEA (refdata.js) sempre refletem a edição em uso pelo caso aberto.
-import { FOCUS, IPEA, EDICOES_EMBUTIDAS } from './refdata.js';
+import { FOCUS, IPEA, EDICOES_EMBUTIDAS, OBSERVADOS } from './refdata.js';
 import * as api from './api.js';
 
 const copiar = o => JSON.parse(JSON.stringify(o));
@@ -23,6 +23,9 @@ export async function carregarLista() {
   const lista = await api.listarRelatorios();
   if (Array.isArray(lista) && lista.some(e => e.fonte === 'focus' && e.situacao === 'carregado') && lista.some(e => e.fonte === 'ipea' && e.situacao === 'carregado')) {
     estadoEdicoes.lista = lista; estadoEdicoes.origem = 'supabase';
+    // Valores observados: os do banco substituem a cópia embutida.
+    const obs = await api.listarObservados();
+    if (Array.isArray(obs) && obs.length) OBSERVADOS.splice(0, OBSERVADOS.length, ...obs.map(r => ({ ...r, valor: Number(r.valor) })));
   }
   return estadoEdicoes.lista;
 }
@@ -41,7 +44,17 @@ function aplicarFocus(ed, linhas) {
 }
 function aplicarIpea(ed, linhas) {
   IPEA.registros = linhas.map(r => ({ id: r.id, tema: r.tema, indicador: r.indicador, valor: r.valor, unidade: r.unidade, periodo: r.periodo, natureza: r.natureza, pagina: r.pagina, nota: r.nota || '', chave: r.chave || undefined, ano: r.ano || undefined }));
-  Object.assign(IPEA, ed.metadados || {}, { edicao: ed.id });
+  Object.assign(IPEA, ed.metadados || {}, { edicao: ed.id, data: ed.data_referencia });
+}
+// Edição do Ipea imediatamente anterior à informada (base de comparação das projeções); null se não houver dados.
+async function anteriorIpea(ed) {
+  const ant = carregadas('ipea').find(e => e.data_referencia < ed.data_referencia);
+  if (!ant) return null;
+  try {
+    const linhas = await dadosDe(ant);
+    if (!linhas) return null;
+    return { id: ant.id, numero: ant.metadados?.numero ?? null, curto: ant.metadados?.curto || `Carta ${ant.rotulo}`, registros: linhas.map(r => ({ id: r.id, valor: Number(r.valor), chave: r.chave || null, ano: r.ano || null })) };
+  } catch { return null; }
 }
 
 // Dados de uma edição: do banco (com cache) ou, para as edições embutidas sem banco, da cópia local.
@@ -64,7 +77,8 @@ export async function usarEdicao(fonte, id) {
   const linhas = await dadosDe(ed);
   if (linhas) (fonte === 'focus' ? aplicarFocus : aplicarIpea)(ed, linhas);
   else if (fonte === 'focus') { Object.assign(FOCUS, copiar(EMBUTIDO.focus), ed.metadados || {}, { edicao: ed.id }); }
-  else { Object.assign(IPEA, copiar(EMBUTIDO.ipea), ed.metadados || {}, { edicao: ed.id }); }
+  else { Object.assign(IPEA, copiar(EMBUTIDO.ipea), ed.metadados || {}, { edicao: ed.id, data: ed.data_referencia }); }
+  if (fonte === 'ipea') IPEA.anterior = await anteriorIpea(ed);
   estadoEdicoes.emUso[fonte] = ed.id;
   return ed;
 }

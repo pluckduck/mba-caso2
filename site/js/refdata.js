@@ -75,6 +75,8 @@ const ANA = 'Estimativa ou análise da fonte';
 export const IPEA = {
   id: 'ipea',
   edicao: 'ipea-cc71',
+  data: '2026-07-08',
+  anterior: null,   // edição imediatamente anterior (para comparar projeções); preenchida por edicoes.js
   numero: 71,
   curto: 'Carta de Conjuntura nº 71',
   curtoNota: 'Carta de Conjuntura nº 71, Nota de Conjuntura 24',
@@ -161,6 +163,35 @@ export const IPEA = {
     { titulo: 'Política fiscal sem mudança em 2026', texto: 'O Ipea não antevê alteração da política fiscal no ano; a dívida segue em alta e o tema deve entrar no debate eleitoral.', pagina: 6 },
   ],
 };
+
+// ---------- Dados observados ("onde está hoje") ----------
+// Séries com o último valor medido, para comparar com as projeções. modo "nivel": o valor vale até mudar (taxa, cotação)
+// e é comparado com o de quatro semanas antes, a mesma janela do Focus. modo "periodo": cada medição cobre um período
+// (mês, trimestre) e é comparada com a medição anterior.
+export const SERIES_OBS = {
+  selic: { variavel: 'juros', nome: 'Taxa Selic (meta)', unidade: '% a.a.', casas: 2, modo: 'nivel', fonte: 'Banco Central do Brasil (Copom)' },
+  cambio: { variavel: 'cambio', nome: 'Dólar PTAX (venda)', unidade: 'R$/US$', casas: 2, modo: 'nivel', fonte: 'Banco Central do Brasil (PTAX)' },
+  ipca: { variavel: 'inflacao', nome: 'IPCA acumulado em 12 meses', unidade: '%', casas: 2, modo: 'periodo', fonte: 'IBGE (IPCA)' },
+  pib: { variavel: 'pib', nome: 'PIB acumulado em quatro trimestres', unidade: '%', casas: 1, modo: 'periodo', fonte: 'IBGE (Contas Nacionais Trimestrais)' },
+  fbcf: { variavel: 'investimento', nome: 'FBCF ante o mesmo trimestre do ano anterior', unidade: '%', casas: 1, modo: 'periodo', fonte: 'IBGE (Contas Nacionais Trimestrais), via Carta de Conjuntura do Ipea' },
+};
+const o = (serie, data, valor, rotulo, curto, disponivel_em = null) => ({ serie, data, valor, rotulo, curto, disponivel_em, fonte: SERIES_OBS[serie].fonte });
+// Cópia embutida (modo local ou falha do banco). No uso normal, os valores vêm da tabela "observados".
+export const OBSERVADOS = [
+  o('selic', '2026-09-16', 13.75, 'Copom de 16/09/2026', 'Copom, 16/9', '2026-09-16'),
+  o('selic', '2026-11-04', 13.75, 'Copom de 04/11/2026', 'Copom, 4/11', '2026-11-04'),
+  o('cambio', '2026-09-25', 5.1991, 'PTAX de 25/09/2026', 'PTAX de 25/9', '2026-09-25'),
+  o('cambio', '2026-10-09', 4.9892, 'PTAX de 09/10/2026', 'PTAX de 9/10', '2026-10-09'),
+  o('cambio', '2026-10-23', 5.0377, 'PTAX de 23/10/2026', 'PTAX de 23/10', '2026-10-23'),
+  o('cambio', '2026-11-06', 5.5013, 'PTAX de 06/11/2026', 'PTAX de 6/11', '2026-11-06'),
+  o('ipca', '2026-08-31', 4.22, '12 meses até agosto de 2026', '12 meses até ago.', '2026-09-11'),
+  o('ipca', '2026-09-30', 4.58, '12 meses até setembro de 2026', '12 meses até set.', '2026-10-09'),
+  o('ipca', '2026-10-31', 4.63, '12 meses até outubro de 2026', '12 meses até out.', '2026-11-12'),
+  o('pib', '2026-03-31', 2.0, 'quatro trimestres até o 1º trimestre de 2026', '4 trim. até 1º tri/26', '2026-07-08'),   // disponível, no mais tardar, na Carta nº 71
+  o('pib', '2026-06-30', 1.9, 'quatro trimestres até o 2º trimestre de 2026', '4 trim. até 2º tri/26', '2026-09-01'),
+  o('fbcf', '2026-03-31', -1.4, '1º trimestre de 2026 ante o 1º de 2025', '1º tri/26 ante 1º tri/25', '2026-07-08'),
+  o('fbcf', '2026-06-30', 1.4, '2º trimestre de 2026 ante o 2º de 2025', '2º tri/26 ante 2º tri/25', '2026-09-01'),
+];
 
 // Edições embutidas no aplicativo: são a reserva para o modo local ou para falha do banco de dados.
 // No uso normal, as edições (inclusive estas) vêm das tabelas relatorios, focus_dados e ipea_dados.
@@ -330,7 +361,8 @@ export function comUnidade(n, unidade = '', casas = 2) {
   return `${v} ${u}`;
 }
 const casasDe = n => (Number.isInteger(n) ? 0 : (String(n).split('.')[1]?.length || 1));
-export const valorIpea = r => comUnidade(r.valor, r.unidade, casasDe(r.valor));
+// Taxas em % sempre com ao menos uma casa decimal (2,0% e não 2%).
+export const valorIpea = r => comUnidade(r.valor, r.unidade, String(r.unidade || '').startsWith('%') ? Math.max(1, casasDe(r.valor)) : casasDe(r.valor));
 
 // Referências publicadas para uma variável do catálogo (Focus e Ipea), usadas no simulador de cenários.
 export function referenciasPublicadas(varId) {

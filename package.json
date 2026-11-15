@@ -6,6 +6,7 @@
   "scripts": {
     "seed": "node scripts/gerar-seed.mjs > supabase/seed.sql",
     "edicoes": "node scripts/gerar-edicoes.mjs > supabase/edicoes.sql",
-    "dev": "python3 -m http.server 8765 --directory site"
+    "dev": "python3 -m http.server 8765 --directory site",
+    "observados": "node scripts/gerar-observados.mjs > supabase/observados.sql"
   }
 }

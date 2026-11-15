@@ -2,7 +2,7 @@
 // num quadro 16:9 de 13,333 x 7,5). A mesma descrição alimenta a visualização em HTML e a exportação em PPTX,
 // o que garante que o arquivo exportado corresponda ao que se vê na tela e permaneça editável no PowerPoint.
 import { fonteCss, fontePptx, misturar, luminancia } from './themes.js';
-import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, classificarValor, numSimples, direcao, catalogo } from './modelo.js';
+import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, classificarValor, numSimples, direcao, catalogo, quadro, SETA as GLIFO } from './modelo.js';
 import { FOCUS, IPEA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
 
 export const W = 13.333, H = 7.5;
@@ -86,6 +86,9 @@ function ajustar(el, tema) {
   return r;
 }
 
+// Página em construção e total de páginas (definidos por construir): um slide do roteiro pode ocupar mais de uma página.
+let paginaAtual = null, totalPaginas = 5;
+
 // ---------- Blocos de texto com possibilidade de edição específica para o slide ----------
 function criarContexto(caso, tema) {
   const blocos = [];
@@ -93,7 +96,7 @@ function criarContexto(caso, tema) {
   const txt = (slide, key, rotulo, padrao) => {
     const original = limpo(padrao);
     const editado = caso.slides.textos[key];
-    blocos.push({ slide, key, rotulo, padrao: original, editado: typeof editado === 'string' });
+    blocos.push({ slide, pag: paginaAtual ? paginaAtual.seq - 1 : slide - 1, key, rotulo, padrao: original, editado: typeof editado === 'string' });
     return typeof editado === 'string' ? limpo(editado) : original;
   };
   const raio = Math.min(0.3, (tema.el.raio || 0) / 90);
@@ -119,7 +122,10 @@ function moldura(ctx, n, fontes) {
   if (el.deco === 'circulos') { els.push(E(W - 1.55, -1.0, 2.5, 2.5, { fill: c.primaria, alpha: 0.13 }), E(W - 2.45, 0.35, 1.0, 1.0, { fill: c.destaque, alpha: 0.2 })); }
   if (el.deco === 'grade') { for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) els.push(E(W - 1.55 + i * 0.2, 0.28 + j * 0.2, 0.06, 0.06, { fill: c.suave, alpha: 0.55 })); }
 
-  const titulo = el.caixaAlta ? TITULOS[n - 1].toUpperCase() : TITULOS[n - 1];
+  const pg = paginaAtual || { seq: n, parte: 1, partes: 1 };
+  const tituloBase = TITULOS[n - 1] + (pg.partes > 1 ? ` · ${pg.parte}/${pg.partes}` : '');
+  const titulo = el.caixaAlta ? tituloBase.toUpperCase() : tituloBase;
+  const numero = `${pg.seq}/${totalPaginas}`;
   const kicker = `ESTUDO DE CASO 2 · CENÁRIOS ECONÔMICOS E ESTRATÉGIAS DE VENDAS`;
   const larguraTitulo = X1 - X0 - (el.deco === 'nenhum' || el.deco === 'barra' ? 0 : 1.9);
   if (el.cabecalho === 'faixa') {
@@ -140,10 +146,10 @@ function moldura(ctx, n, fontes) {
     els.push(LN(X0, 6.88, X1 - X0, 0, { color: c.borda, lw: 0.75 }));
     const esquerda = el.fontes && fontes ? `Fontes: ${fontes}` : 'MBA Gestão Comercial e SalesTech';
     els.push(TX(X0, 6.93, X1 - X0 - 3.3, 0.4, esquerda, { max: 8.5, min: 6.5, color: c.suave, valign: 'middle' }));
-    const direita = [limpo(caso.ident.empresa), el.numeracao ? `${n}/5` : ''].filter(Boolean).join('  ·  ');
+    const direita = [limpo(caso.ident.empresa), el.numeracao ? numero : ''].filter(Boolean).join('  ·  ');
     els.push(TX(X1 - 3.2, 6.93, 3.2, 0.4, direita, { max: 9, min: 7, color: c.suave, align: 'right', valign: 'middle' }));
   } else if (el.numeracao) {
-    els.push(TX(X1 - 1, 7.08, 1, 0.3, `${n}/5`, { max: 9, min: 7, color: c.suave, align: 'right', valign: 'middle' }));
+    els.push(TX(X1 - 1, 7.08, 1, 0.3, numero, { max: 9, min: 7, color: c.suave, align: 'right', valign: 'middle' }));
   }
   return { els, X0, X1, Y0: 1.5, Y1 };
 }
@@ -164,7 +170,7 @@ function slide1(ctx) {
   const meta = [P(`Autor: ${limpo(caso.ident.aluno) || '—'}`), P(`Horizonte dos cenários: ${horizonteTxt(caso.ident)}`)];
   els.push(TX(X0 + 0.28, Y0 + 1.75, wE - 0.56, 0.62, meta, { max: 11, min: 8, color: cp }));
 
-  const vars = variaveisAtivas(caso).slice(0, 5);
+  const vars = variaveisAtivas(caso).slice(0, 8);
   const yB = Y0 + 2.55;
   els.push(LN(X0 + 0.28, yB - 0.1, wE - 0.56, 0, { color: misturar(cp, c.primaria, 0.55), lw: 0.75 }));
   els.push(TX(X0 + 0.28, yB, wE - 0.56, 0.24, P('SENSIBILIDADE ÀS VARIÁVEIS', { bold: true }), { max: 9, min: 7, color: misturar(cp, c.primaria, 0.25), valign: 'middle' }));
@@ -198,53 +204,154 @@ function slide1(ctx) {
 }
 
 // ---------- Slide 2: indicadores ----------
-function slide2(ctx) {
-  const { caso, c, txt, cartao, rotulo, tom } = ctx;
-  const m = moldura(ctx, 2, `${FONTE_FOCUS()}; ${FONTE_IPEA()}.`);
+// Cada variável mostra três blocos (dado observado, projeção publicada e revisão da projeção) e a leitura da tendência.
+// Até 4 variáveis: uma página, com as consultas embaixo. A partir de 5: páginas de até 5 linhas em tamanho cheio;
+// a última leva as linhas restantes (até 4) e as consultas ao Focus e ao Ipea.
+function paginas2(ctx) {
+  const vars = variaveisAtivas(ctx.caso);
+  if (vars.length <= 4) return [() => pagina2(ctx, vars, 0, true)];
+  const grupos = [];
+  for (let i = 0; i < vars.length; i += 5) grupos.push({ ini: i, vars: vars.slice(i, i + 5) });
+  if (grupos.at(-1).vars.length === 5) grupos.push({ ini: vars.length, vars: [] });
+  return grupos.map((g, k) => () => pagina2(ctx, g.vars, g.ini, k === grupos.length - 1));
+}
+// Parágrafos de um bloco do quadro: valor, seta com a diferença e legenda. Sem dado: traço e o motivo.
+function blocoQuadro(b, c, vazio = '') {
+  if (!b) return [P('—', { bold: true, color: c.suave, k: 1.3 }), P(vazio, { color: c.suave, k: 0.82 })];
+  const paras = [P(b.valor, { bold: true, color: b.cor || c.primaria, k: 1.3 })];
+  const d = b.deltaCurto ?? b.delta;
+  if (b.dir && d) paras.push(P(`${GLIFO[b.dir]} ${d}`));
+  if (b.curta) paras.push(P(b.curta, { color: c.suave, k: 0.82 }));
+  return paras;
+}
+function pagina2(ctx, vars, ini, comConsultas) {
+  const { caso, c, txt, cartao, tom } = ctx;
+  const m = moldura(ctx, 2, `${FONTE_FOCUS()}; ${FONTE_IPEA()}; dados observados: Banco Central do Brasil e IBGE.`);
   const { els, X0, X1, Y0, Y1 } = m;
-  const vars = variaveisAtivas(caso).slice(0, 5);
-  const wT = X1 - X0, hStrip = 1.12, gap = 0.16, hCab = 0.4;
-  const prop = [0.16, 0.15, 0.24, 0.225, 0.225];
-  const xs = prop.reduce((a, p, i) => { a.push(i === 0 ? X0 : a[i - 1] + prop[i - 1] * wT); return a; }, []);
-  const cab = ['Variável', 'Dado ou projeção', 'Natureza, fonte e período', 'Tendência', 'Implicação para a empresa'];
-  els.push(R(X0, Y0, wT, hCab, { fill: c.primaria, r: ctx.raio * 0.5 }));
-  cab.forEach((t, i) => els.push(TX(xs[i] + 0.1, Y0, prop[i] * wT - 0.2, hCab, P(t, { bold: true }), { max: 10.5, min: 8, color: c.sobrePrimaria, valign: 'middle' })));
-  const n = Math.max(vars.length, 1);
-  const hRow = Math.min(1.25, (Y1 - Y0 - hCab - hStrip - gap) / n);
-  vars.forEach((v, i) => {
-    const y = Y0 + hCab + i * hRow;
-    if (i % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
-    els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
-    const cel = (j, paras, o = {}) => els.push(TX(xs[j] + 0.1, y + 0.07, prop[j] * wT - 0.2, hRow - 0.14, paras, { max: 10.5, min: 7, color: c.texto, valign: 'middle', ...o }));
-    cel(0, P(txt(2, `s2.nome.${v.uid}`, `Variável ${i + 1}: nome`, v.nome), { bold: true }), { max: 12 });
-    cel(1, P(txt(2, `s2.dado.${v.uid}`, `Variável ${i + 1}: dado ou projeção`, v.dado), { bold: true }), { max: 13, color: c.primaria });
-    cel(2, [P(limpo(v.natureza) || 'Natureza não informada', { bold: true, color: v.natureza === 'Hipótese do autor' ? c.destaque : c.texto }),
-      P(txt(2, `s2.fonte.${v.uid}`, `Variável ${i + 1}: fonte`, v.fonte)),
-      P([v.publicacao && `Publicação: ${limpo(v.publicacao)}`, v.periodo && `Período: ${limpo(v.periodo)}`].filter(Boolean).join(' · '), { color: c.suave })], { max: 9.5 });
-    cel(3, txt(2, `s2.tendencia.${v.uid}`, `Variável ${i + 1}: tendência`, v.tendencia));
-    cel(4, txt(2, `s2.implicacao.${v.uid}`, `Variável ${i + 1}: implicação`, v.implicacao));
-  });
-  if (!vars.length) els.push(TX(X0, Y0 + hCab + 0.2, wT, 0.5, 'Registre ao menos três variáveis na etapa 2.', { max: 12, color: c.suave, italic: true }));
-
-  const yS = Y1 - hStrip, wS = (wT - gap) / 2;
-  const consultas = [
-    ['s2.focus', `Relatório Focus${caso.consultas.focusData ? ` — ${limpo(caso.consultas.focusData)}` : ''}`, caso.consultas.focusTexto],
-    ['s2.ipea', `Ipea — ${limpo(caso.consultas.ipeaTitulo) || 'Carta de Conjuntura'}`, caso.consultas.ipeaTexto],
-  ];
-  consultas.forEach(([key, rot, valor], i) => {
-    const x = X0 + i * (wS + gap);
-    els.push(cartao(x, yS, wS, hStrip));
-    els.push(R(x, yS, 0.07, hStrip, { fill: c.destaque }));
-    els.push(TX(x + 0.22, yS + 0.1, wS - 0.4, 0.26, P(rot, { bold: true }), { max: 10, min: 7.5, color: c.primaria, valign: 'middle' }));
-    els.push(TX(x + 0.22, yS + 0.38, wS - 0.4, hStrip - 0.48, txt(2, key, rot, valor), { max: 10.5, min: 7, color: c.texto }));
-  });
+  const wT = X1 - X0, gap = 0.16, hCab = 0.5;
+  const total = variaveisAtivas(caso).length;
+  const hStrip = !comConsultas ? 0 : (vars.length || !total) ? 1.12 : Y1 - Y0;
+  if (vars.length || !total) {
+    const prop = [0.13, 0.18, 0.18, 0.15, 0.36];
+    const xs = prop.reduce((a, p, i) => { a.push(i === 0 ? X0 : a[i - 1] + prop[i - 1] * wT); return a; }, []);
+    const cab = [['', 'Variável'], ['Dado observado', 'Onde está hoje'], ['Projeção publicada', 'Para onde deve ir'], ['Revisão da projeção', 'A previsão mudou?'], ['', 'Implicação para a empresa']];
+    const corSub = misturar(c.sobrePrimaria, c.primaria, 0.25);
+    els.push(R(X0, Y0, wT, hCab, { fill: c.primaria, r: ctx.raio * 0.5 }));
+    cab.forEach(([sub, t], i) => els.push(TX(xs[i] + 0.1, Y0, prop[i] * wT - 0.2, hCab, sub ? [P(sub.toUpperCase(), { k: 0.72, color: corSub }), P(t, { bold: true })] : P(t, { bold: true }), { max: 10.5, min: 8, color: c.sobrePrimaria, valign: 'middle' })));
+    const area = Y1 - Y0 - hCab - (hStrip ? hStrip + gap : 0);
+    const hRow = Math.min(1.25, area / Math.max(vars.length, 1));
+    vars.forEach((v, i) => {
+      const n = ini + i + 1, y = Y0 + hCab + i * hRow, q = quadro(v);
+      if (i % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
+      els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
+      const cel = (j, paras, o = {}) => els.push(TX(xs[j] + 0.1, y + 0.06, prop[j] * wT - 0.2, hRow - 0.12, paras, { max: 10.5, min: 7, color: c.texto, valign: 'middle', ...o }));
+      cel(0, P(txt(2, `s2.nome.${v.uid}`, `Variável ${n}: nome`, v.nome), { bold: true }), { max: 11 });
+      const leitura = txt(2, `s2.tendencia.${v.uid}`, `Variável ${n}: leitura da tendência`, v.tendencia);
+      // Uma linha para a leitura; duas quando o texto é longo (por exemplo, o que o autor escreveu por extenso).
+      const hL = leitura.length > 100 ? Math.min(0.34, hRow * 0.34) : Math.min(0.2, hRow * 0.2);
+      const hC = hRow - 0.12 - (leitura ? hL : 0);
+      const bloco = (j, paras) => els.push(TX(xs[j] + 0.1, y + 0.06, prop[j] * wT - 0.2, hC, paras, { max: 10, min: 7, color: c.texto, valign: 'middle' }));
+      // Projeção: a publicada (com seta em relação a hoje) ou, para hipótese e estimativa, o valor com a sua natureza.
+      const dado = txt(2, `s2.dado.${v.uid}`, `Variável ${n}: dado ou projeção`, v.dado);
+      const hipotese = v.natureza === 'Hipótese do autor';
+      const proj = q.proj ? { ...q.proj, valor: dado || q.proj.valor }
+        : (dado && v.natureza !== 'Dado observado' ? { valor: dado, dir: null, cor: hipotese ? c.destaque : null, curta: [limpo(v.natureza), limpo(v.periodo)].filter(Boolean).join(' · ') } : null);
+      bloco(1, blocoQuadro(q.hoje, c, 'sem dado observado carregado'));
+      bloco(2, blocoQuadro(proj, c, 'sem projeção publicada'));
+      bloco(3, blocoQuadro(q.rev, c, q.proj ? 'sem edição anterior para comparar' : ''));
+      if (leitura) els.push(TX(xs[1] + 0.1, y + 0.06 + hC, (prop[1] + prop[2] + prop[3]) * wT - 0.2, hL, P(`Leitura: ${leitura}`, { italic: true }), { max: 8.5, min: 7, color: c.texto, valign: 'middle' }));
+      cel(4, txt(2, `s2.implicacao.${v.uid}`, `Variável ${n}: implicação`, v.implicacao));
+    });
+    if (!total) els.push(TX(X0, Y0 + hCab + 0.2, wT, 0.5, 'Registre ao menos três variáveis na etapa 2.', { max: 12, color: c.suave, italic: true }));
+  }
+  if (hStrip) {
+    const yS = Y1 - hStrip, wS = (wT - gap) / 2, alto = hStrip > 2;
+    const consultas = [
+      ['s2.focus', `Relatório Focus${caso.consultas.focusData ? ` — ${limpo(caso.consultas.focusData)}` : ''}`, caso.consultas.focusTexto],
+      ['s2.ipea', `Ipea — ${limpo(caso.consultas.ipeaTitulo) || 'Carta de Conjuntura'}`, caso.consultas.ipeaTexto],
+    ];
+    consultas.forEach(([key, rot, valor], i) => {
+      const x = X0 + i * (wS + gap), hT = alto ? 0.4 : 0.26;
+      els.push(cartao(x, yS, wS, hStrip));
+      els.push(R(x, yS, 0.07, hStrip, { fill: c.destaque }));
+      els.push(TX(x + 0.22, yS + (alto ? 0.2 : 0.1), wS - 0.4, hT, P(rot, { bold: true }), { max: alto ? 14 : 10, min: 7.5, color: c.primaria, valign: 'middle' }));
+      els.push(TX(x + 0.22, yS + (alto ? 0.75 : 0.38), wS - 0.4, hStrip - (alto ? 0.95 : 0.48), txt(2, key, rot, valor), { max: alto ? 14 : 10.5, min: 7, color: c.texto }));
+    });
+  }
   return els;
 }
 
 // ---------- Slide 3: cenários ----------
+// Até 4 variáveis: uma página (cartões dos cenários e gráfico). A partir de 5: a primeira página traz premissas e
+// fundamentação; as seguintes, a tabela com a trajetória de todas as variáveis (até 6 por página).
+const FONTES3 = () => `${FONTE_FOCUS()}; ${FONTE_IPEA()}; hipóteses do autor. P = valor publicado nas fontes; H = hipótese do autor.`;
+const corCenario = (c, cor) => (cor === c.fundo ? c.texto : (luminancia(c.superficie) < 0.35 ? cor : misturar(cor, c.texto, 0.25)));
+function paginas3(ctx) {
+  const vars = variaveisAtivas(ctx.caso);
+  if (vars.length <= 4) return [() => slide3(ctx)];
+  const fns = [() => slide3Premissas(ctx)];
+  for (let i = 0; i < vars.length; i += 6) { const g = vars.slice(i, i + 6); fns.push(() => slide3Tabela(ctx, g)); }
+  return fns;
+}
+function slide3Premissas(ctx) {
+  const { caso, c, txt, cartao, rotulo } = ctx;
+  const { els, X0, X1, Y0, Y1 } = moldura(ctx, 3, FONTES3());
+  const gap = 0.2, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0;
+  CENARIOS.forEach((s, i) => {
+    const cen = caso.cenarios[s.id], cor = c[s.id], x = X0 + i * (wC + gap);
+    els.push(cartao(x, Y0, wC, hC));
+    els.push(R(x, Y0, wC, 0.46, { fill: cor, r: ctx.raio }));
+    if (ctx.raio > 0) els.push(R(x, Y0 + 0.23, wC, 0.23, { fill: cor }));
+    els.push(TX(x + 0.2, Y0, wC - 0.4, 0.46, P(s.nome, { bold: true }), { max: 14, min: 10, fonte: 'titulo', color: sobre(cor), valign: 'middle' }));
+    let y = Y0 + 0.62;
+    els.push(rotulo(x + 0.2, y, wC - 0.4, 'Premissas', c.suave));
+    els.push(TX(x + 0.2, y + 0.28, wC - 0.4, 1.95, txt(3, `s3.premissas.${s.id}`, `${s.nome}: premissas`, cen.premissas), { max: 12, min: 8, color: c.texto }));
+    y += 2.4;
+    els.push(rotulo(x + 0.2, y, wC - 0.4, 'Fundamentação', c.suave));
+    const padrao = [limpo(cen.publicadas) && `Projeções publicadas: ${limpo(cen.publicadas)}`, limpo(cen.hipoteses) && `Hipóteses do autor: ${limpo(cen.hipoteses)}`].filter(Boolean).join('\n');
+    const fund = txt(3, `s3.fund.${s.id}`, `${s.nome}: fundamentação`, padrao);
+    els.push(TX(x + 0.2, y + 0.28, wC - 0.4, Y0 + hC - 0.16 - (y + 0.28), fund.split('\n').map(l => P(l)), { max: 11, min: 7.5, color: c.texto }));
+  });
+  return els;
+}
+function slide3Tabela(ctx, vars) {
+  const { caso, c, txt, tom } = ctx;
+  const { els, X0, X1, Y0, Y1 } = moldura(ctx, 3, FONTES3());
+  const wT = X1 - X0, hCab = 0.45, w0 = 1.8, wS = 2.6, wG = wT - w0 - 3 * wS;
+  const cab = (x, w, t, cor) => { els.push(R(x, Y0, w, hCab, { fill: cor })); els.push(TX(x + 0.12, Y0, w - 0.24, hCab, P(t, { bold: true }), { max: 10.5, min: 8, color: sobre(cor), valign: 'middle' })); };
+  cab(X0, w0, 'Variável', c.primaria);
+  CENARIOS.forEach((s, i) => cab(X0 + w0 + i * wS, wS, s.nome, c[s.id]));
+  cab(X0 + w0 + 3 * wS, wG, 'Comparação', c.primaria);
+  const hRow = Math.min(0.96, (Y1 - Y0 - hCab) / vars.length);
+  vars.forEach((v, r) => {
+    const y = Y0 + hCab + r * hRow;
+    if (r % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
+    els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
+    els.push(TX(X0 + 0.12, y + 0.05, w0 - 0.24, hRow - 0.1, [P(v.nome, { bold: true }), P(limpo(v.unidade), { color: c.suave, k: 0.8 })], { max: 10.5, min: 7.5, color: c.texto, valign: 'middle' }));
+    const vals = CENARIOS.map(s => numSimples(caso.cenarios[s.id].traj[v.uid]?.valor));
+    CENARIOS.forEach((s, i) => {
+      const t = caso.cenarios[s.id].traj[v.uid] || {}, n = vals[i];
+      const cls = classificarValor(referenciasPublicadas(v.tipo), t.valor);
+      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls ? `  (${cls.tipo})` : ''}`;
+      const just = txt(3, `s3.just.${s.id}.${v.uid}`, `${v.nome} — ${s.curto}: justificativa`, t.justificativa);
+      els.push(TX(X0 + w0 + i * wS + 0.12, y + 0.05, wS - 0.24, hRow - 0.1, [P(valor, { bold: true, color: corCenario(c, c[s.id]), k: 1.25 }), P(just)], { max: 9.5, min: 7, color: c.texto, valign: 'middle' }));
+    });
+    // Barras comparativas dos três cenários, na mesma escala do gráfico do slide único.
+    const validos = vals.filter(n => n !== null), hi = Math.max(...validos, 0), lo = Math.min(...validos, 0);
+    const xG = X0 + w0 + 3 * wS + 0.12, hB = Math.min(0.26, (hRow - 0.14) / 3), yB = y + (hRow - 3 * hB) / 2, wMax = wG - 0.24 - 0.8 - 0.62;
+    CENARIOS.forEach((s, k) => {
+      const yy = yB + k * hB, n = vals[k], frac = n === null || hi === lo ? 0 : (n - lo) / (hi - lo);
+      els.push(TX(xG, yy, 0.76, hB, s.curto, { max: 8.5, min: 6.5, color: c.texto, valign: 'middle' }));
+      els.push(R(xG + 0.8, yy + hB * 0.25, wMax, hB * 0.5, { fill: ctx.tom, r: 0.03 }));
+      if (frac > 0) els.push(R(xG + 0.8, yy + hB * 0.25, Math.max(0.03, wMax * frac), hB * 0.5, { fill: c[s.id], r: 0.03 }));
+      els.push(TX(xG + 0.8 + wMax + 0.06, yy, 0.56, hB, P(n === null ? '—' : fmt(n, 2), { bold: true }), { max: 9, min: 6.5, color: c.texto, valign: 'middle' }));
+    });
+  });
+  return els;
+}
 function slide3(ctx) {
   const { caso, c, txt, cartao, rotulo } = ctx;
-  const m = moldura(ctx, 3, `${FONTE_FOCUS()}; ${FONTE_IPEA()}; hipóteses do autor. P = valor publicado nas fontes; H = hipótese do autor.`);
+  const m = moldura(ctx, 3, FONTES3());
   const { els, X0, X1, Y0, Y1 } = m;
   const vars = variaveisAtivas(caso).slice(0, 4);
   const gap = 0.2, hG = 1.3, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0 - hG - gap;
@@ -308,12 +415,26 @@ function slide3(ctx) {
 const SETA = { sobe: '↑', cai: '↓', estavel: '(estável)' };
 
 // ---------- Slide 4: impactos ----------
-function slide4(ctx) {
-  const { caso, c, txt, cartao, rotulo, tom } = ctx;
-  const m = moldura(ctx, 4, `elaboração do autor com base em ${FONTE_FOCUS()} e ${FONTE_IPEA()}.`);
-  const { els, X0, X1, Y0, Y1 } = m;
-  const wT = X1 - X0, w0 = 2.05, wC = (wT - w0) / 3, hCab = 0.4, hS = 1.18, gap = 0.16;
-  const hRow = (Y1 - Y0 - hCab - hS - gap) / DIMENSOES.length;
+// Até 4 variáveis: uma página (matriz, cadeia de causa e efeito e simulador). A partir de 5: a primeira página traz a
+// matriz; as seguintes, a cadeia de todas as variáveis (até 6 por página), com o simulador na última.
+const F4 = () => `elaboração do autor com base em ${FONTE_FOCUS()} e ${FONTE_IPEA()}.`;
+// Movimento da variável no cenário base em relação ao dado observado ("hoje"); sem dado observado, em relação à evidência registrada.
+function movimentoBase(caso, v) {
+  const q = quadro(v);
+  const base = numSimples(caso.cenarios.base.traj[v.uid]?.valor);
+  const ref = q.hoje ? q.hoje.num : numSimples(v.valorNum);
+  return { d: direcao(base, ref), base, ref, deHoje: Boolean(q.hoje), casas: q.hoje?.casas ?? 2 };
+}
+function paginas4(ctx) {
+  const vars = variaveisAtivas(ctx.caso);
+  if (vars.length <= 4) return [() => slide4(ctx)];
+  const fns = [() => slide4Matriz(ctx)];
+  for (let i = 0; i < vars.length; i += 6) { const g = vars.slice(i, i + 6), ultima = i + 6 >= vars.length; fns.push(() => slide4Cadeias(ctx, g, ultima)); }
+  return fns;
+}
+function matriz4(ctx, els, X0, Y0, wT, hTotal, maxTxt = 10) {
+  const { caso, c, txt, tom } = ctx;
+  const w0 = 2.05, wC = (wT - w0) / 3, hCab = 0.4, hRow = (hTotal - hCab) / DIMENSOES.length;
   els.push(R(X0, Y0, w0, hCab, { fill: c.primaria }));
   els.push(TX(X0 + 0.1, Y0, w0 - 0.2, hCab, P('Dimensão comercial', { bold: true }), { max: 10.5, min: 8, color: c.sobrePrimaria, valign: 'middle' }));
   CENARIOS.forEach((s, i) => {
@@ -327,37 +448,76 @@ function slide4(ctx) {
     els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
     els.push(TX(X0 + 0.1, y + 0.05, w0 - 0.2, hRow - 0.1, P(d.curto, { bold: true }), { max: 10.5, min: 8, color: c.primaria, valign: 'middle' }));
     CENARIOS.forEach((s, i) => {
-      els.push(TX(X0 + w0 + i * wC + 0.1, y + 0.05, wC - 0.2, hRow - 0.1, txt(4, `s4.${d.id}.${s.id}`, `${d.curto} — ${s.curto}`, caso.impactos[s.id][d.id]), { max: 10, min: 6.5, color: c.texto, valign: 'middle' }));
+      els.push(TX(X0 + w0 + i * wC + 0.1, y + 0.05, wC - 0.2, hRow - 0.1, txt(4, `s4.${d.id}.${s.id}`, `${d.curto} — ${s.curto}`, caso.impactos[s.id][d.id]), { max: maxTxt, min: 6.5, color: c.texto, valign: 'middle' }));
     });
   });
+}
+function simulador4(ctx, els, sim, x, yS, wSim, hS) {
+  const { c, cartao, rotulo, tom } = ctx;
+  els.push(cartao(x, yS, wSim, hS));
+  els.push(rotulo(x + 0.18, yS + 0.08, wSim - 0.36, 'Receita estimada ante o cenário base (hipótese do autor)', c.primaria));
+  const alvo = ['favoravel', 'adverso'], maxAbs = Math.max(...alvo.map(k => Math.abs(sim[k].delta)), 0.0001);
+  alvo.forEach((k, i) => {
+    const yy = yS + 0.42 + i * 0.34, dlt = sim[k].delta, wMax = wSim - 0.36 - 0.9 - 0.85;
+    els.push(TX(x + 0.18, yy, 0.9, 0.26, CENARIOS.find(s => s.id === k).curto, { max: 9.5, min: 7, color: c.texto, valign: 'middle' }));
+    els.push(R(x + 1.08, yy + 0.06, wMax, 0.14, { fill: tom, r: 0.03 }));
+    els.push(R(x + 1.08, yy + 0.06, Math.max(0.03, wMax * Math.abs(dlt) / maxAbs), 0.14, { fill: c[k], r: 0.03 }));
+    els.push(TX(x + 1.08 + wMax + 0.06, yy, 0.8, 0.26, P(`${dlt > 0 ? '+' : ''}${fmt(dlt, 1)}%`, { bold: true }), { max: 10, min: 7, color: c.texto, valign: 'middle' }));
+  });
+}
+function slide4Matriz(ctx) {
+  const { els, X0, X1, Y0, Y1 } = moldura(ctx, 4, F4());
+  matriz4(ctx, els, X0, Y0, X1 - X0, Y1 - Y0, 11);
+  return els;
+}
+function slide4Cadeias(ctx, vars, ultima) {
+  const { caso, c, txt, tom } = ctx;
+  const { els, X0, X1, Y0, Y1 } = moldura(ctx, 4, F4());
+  const wT = X1 - X0, hCab = 0.45, gap = 0.16, hS = 1.18, wSeta = 0.3, w0 = 3.14, wE = (wT - w0 - 2 * wSeta) / 2;
+  const sim = simular(caso), comSim = ultima && sim.temDados;
+  const xC = X0 + w0 + wSeta, xV = xC + wE + wSeta;
+  els.push(R(X0, Y0, wT, hCab, { fill: c.primaria, r: ctx.raio * 0.5 }));
+  [[X0, w0, 'Variável no cenário base'], [xC, wE, 'Efeito no cliente'], [xV, wE, 'Efeito nas vendas']].forEach(([x, w, t]) =>
+    els.push(TX(x + 0.12, Y0, w - 0.24, hCab, P(t, { bold: true }), { max: 10.5, min: 8, color: c.sobrePrimaria, valign: 'middle' })));
+  const hRow = Math.min(1.0, (Y1 - Y0 - hCab - (comSim ? hS + gap : 0)) / vars.length);
+  vars.forEach((v, r) => {
+    const y = Y0 + hCab + r * hRow, k = caso.impactos.base.cadeias[v.uid] || {}, mv = movimentoBase(caso, v);
+    if (r % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
+    els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
+    const mov = !mv.d ? 'sem valor no cenário base ou sem referência'
+      : mv.d === 'estavel' ? `${GLIFO.estavel} mantém ${comUnidade(mv.base, v.unidade)}${mv.deHoje ? ', o nível de hoje' : ''}`
+      : `${GLIFO[mv.d]} de ${comUnidade(mv.ref, v.unidade, mv.casas)}${mv.deHoje ? ' (hoje)' : ''} para ${comUnidade(mv.base, v.unidade)}`;
+    els.push(TX(X0 + 0.12, y + 0.05, w0 - 0.24, hRow - 0.1, [P(v.nome, { bold: true }), P(mov, { k: 0.88 })], { max: 10.5, min: 7.5, color: c.texto, valign: 'middle' }));
+    [[xC, 'cliente', 'efeito no cliente'], [xV, 'vendas', 'efeito nas vendas']].forEach(([x, campo, rot]) => {
+      els.push(TX(x - wSeta, y, wSeta, hRow, '→', { max: 13, min: 10, color: c.suave, align: 'center', valign: 'middle' }));
+      els.push(TX(x + 0.12, y + 0.05, wE - 0.24, hRow - 0.1, txt(4, `s4.cad.${campo}.${v.uid}`, `${v.nome}: ${rot}`, k[campo]), { max: 10, min: 7, color: c.texto, valign: 'middle' }));
+    });
+  });
+  if (comSim) simulador4(ctx, els, sim, X0, Y1 - hS, wT, hS);
+  return els;
+}
+function slide4(ctx) {
+  const { caso, c, txt, cartao, rotulo } = ctx;
+  const m = moldura(ctx, 4, F4());
+  const { els, X0, X1, Y0, Y1 } = m;
+  const vars = variaveisAtivas(caso).slice(0, 4);
+  const wT = X1 - X0, hS = vars.length > 3 ? 1.5 : 1.18, gap = 0.16;   // a quarta variável pede mais uma linha na cadeia
+  matriz4(ctx, els, X0, Y0, wT, Y1 - Y0 - hS - gap);
 
   const sim = simular(caso);
   const yS = Y1 - hS, wSim = sim.temDados ? 3.9 : 0, wCad = wT - wSim - (wSim ? gap : 0);
   els.push(cartao(X0, yS, wCad, hS));
   els.push(R(X0, yS, 0.07, hS, { fill: c.destaque }));
   els.push(rotulo(X0 + 0.22, yS + 0.08, wCad - 0.4, 'Cadeia de causa e efeito no cenário base: variável → cliente → vendas', c.primaria));
-  const vars = variaveisAtivas(caso).slice(0, 3);
   const cadeia = vars.map(v => {
     const k = caso.impactos.base.cadeias[v.uid] || {};
     if (!limpo(k.cliente) && !limpo(k.vendas)) return '';
-    const d = direcao(caso.cenarios.base.traj[v.uid]?.valor, v.valorNum);
+    const d = movimentoBase(caso, v).d;
     return `${v.nome}${d ? ' ' + SETA[d] : ''} → ${limpo(k.cliente) || '…'} → ${limpo(k.vendas) || '…'}`;
   }).filter(Boolean).join('\n');
   const tCad = txt(4, 's4.cadeia', 'Cadeia de causa e efeito', cadeia);
   els.push(TX(X0 + 0.22, yS + 0.36, wCad - 0.4, hS - 0.46, tCad.split('\n').map(l => P(l, { bullet: true })), { max: 10, min: 6.5, color: c.texto }));
-  if (wSim) {
-    const x = X0 + wCad + gap;
-    els.push(cartao(x, yS, wSim, hS));
-    els.push(rotulo(x + 0.18, yS + 0.08, wSim - 0.36, 'Receita estimada ante o cenário base (hipótese do autor)', c.primaria));
-    const alvo = ['favoravel', 'adverso'], maxAbs = Math.max(...alvo.map(k => Math.abs(sim[k].delta)), 0.0001);
-    alvo.forEach((k, i) => {
-      const yy = yS + 0.42 + i * 0.34, dlt = sim[k].delta, wMax = wSim - 0.36 - 0.9 - 0.85;
-      els.push(TX(x + 0.18, yy, 0.9, 0.26, CENARIOS.find(s => s.id === k).curto, { max: 9.5, min: 7, color: c.texto, valign: 'middle' }));
-      els.push(R(x + 1.08, yy + 0.06, wMax, 0.14, { fill: tom, r: 0.03 }));
-      els.push(R(x + 1.08, yy + 0.06, Math.max(0.03, wMax * Math.abs(dlt) / maxAbs), 0.14, { fill: c[k], r: 0.03 }));
-      els.push(TX(x + 1.08 + wMax + 0.06, yy, 0.8, 0.26, P(`${dlt > 0 ? '+' : ''}${fmt(dlt, 1)}%`, { bold: true }), { max: 10, min: 7, color: c.texto, valign: 'middle' }));
-    });
-  }
+  if (wSim) simulador4(ctx, els, sim, X0 + wCad + gap, yS, wSim, hS);
   return els;
 }
 
@@ -391,10 +551,20 @@ function slide5(ctx) {
   return els;
 }
 
-// Constrói os cinco slides já com o tamanho de fonte ajustado, além da lista de blocos editáveis e alertas.
+// Constrói as páginas dos cinco slides do roteiro, já com o tamanho de fonte ajustado, além da lista de blocos
+// editáveis e dos alertas. Um slide com 5 ou mais variáveis ocupa mais de uma página ("1/2", "2/2"); "paginas"
+// informa, para cada página, o slide do roteiro (n), a parte e o total de partes.
 export function construir(caso, tema) {
   const ctx = criarContexto(caso, tema);
-  const slides = [slide1, slide2, slide3, slide4, slide5].map(f => f(ctx));
+  const plano = [[() => slide1(ctx)], paginas2(ctx), paginas3(ctx), paginas4(ctx), [() => slide5(ctx)]];
+  totalPaginas = plano.reduce((a, fns) => a + fns.length, 0);
+  const slides = [], paginas = [];
+  plano.forEach((fns, i) => fns.forEach((fn, j) => {
+    paginaAtual = { n: i + 1, parte: j + 1, partes: fns.length, seq: slides.length + 1 };
+    slides.push(fn());
+    paginas.push({ ...paginaAtual, rotulo: `Slide ${i + 1}${fns.length > 1 ? ` (parte ${j + 1}/${fns.length})` : ''}` });
+  }));
+  paginaAtual = null;
   const alertas = [];
   slides.forEach((els, i) => {
     let menor = 99, cortes = 0;
@@ -405,11 +575,14 @@ export function construir(caso, tema) {
       if (el.paras.length && el.max >= 10) menor = Math.min(menor, r.size);
       if (r.cortado) cortes++;
     }
-    if (cortes) alertas.push({ slide: i + 1, tipo: 'corte', texto: `Slide ${i + 1}: ${cortes} bloco(s) de texto não coube(ram) e foi(ram) cortado(s). Resuma o texto do slide.` });
-    else if (menor < 8.5) alertas.push({ slide: i + 1, tipo: 'fonte', texto: `Slide ${i + 1}: há texto em corpo ${fmt(menor, 1)} pt, difícil de ler em projeção. Considere resumir.` });
+    const rot = paginas[i].rotulo;
+    if (cortes) alertas.push({ slide: paginas[i].n, tipo: 'corte', texto: `${rot}: ${cortes} bloco(s) de texto não coube(ram) e foi(ram) cortado(s). Resuma o texto do slide.` });
+    else if (menor < 8.5) alertas.push({ slide: paginas[i].n, tipo: 'fonte', texto: `${rot}: há texto em corpo ${fmt(menor, 1)} pt, difícil de ler em projeção. Considere resumir.` });
   });
-  return { slides, blocos: ctx.blocos, alertas };
+  return { slides, paginas, blocos: ctx.blocos, alertas };
 }
+// Índice da primeira página de um slide do roteiro (1 a 5) no resultado de construir.
+export const paginaDoSlide = (res, n) => Math.max(0, res.paginas.findIndex(p => p.n === n));
 
 // ---------- Renderização em HTML ----------
 export function renderHTML(els, tema, px = 1280) {
@@ -458,7 +631,7 @@ function carregarPptx() {
 
 export async function exportarPptx(caso, tema, notas = []) {
   await carregarPptx();
-  const { slides } = construir(caso, tema);
+  const { slides, paginas } = construir(caso, tema);
   const pptx = new window.PptxGenJS();
   pptx.defineLayout({ name: 'CASO2', width: W, height: H });
   pptx.layout = 'CASO2';
@@ -496,7 +669,8 @@ export async function exportarPptx(caso, tema, notas = []) {
         sl.addText(runs, { ...g, fontFace: fontePptx(tema.fontes[el.fonte]), fontSize: size, align: el.align, valign: el.valign, margin: 0, lineSpacingMultiple: 1.0, fit: 'shrink', wrap: true });
       }
     }
-    if (notas[i]) sl.addNotes(notas[i]);
+    const nota = notas[paginas[i].n - 1];
+    if (nota) sl.addNotes(nota);
   });
   const nome = `Caso2_${(caso.ident.empresa || 'cenarios').normalize('NFD').replace(/[^\w]+/g, '_').slice(0, 40)}.pptx`;
   await pptx.writeFile({ fileName: nome });
