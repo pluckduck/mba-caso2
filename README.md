@@ -43,7 +43,7 @@ Com `site/js/config.js` vazio, o aplicativo roda em **modo local**: sem login, c
 
 ## Painel do administrador
 
-Quem estiver na tabela `public.administradores` vê o menu **Turma**: contas criadas, progresso da entrega, último acesso e as escolhas de tema de cada participante. O conteúdo dos casos não é exposto. Para tornar um usuário administrador:
+Quem estiver na tabela `public.administradores` vê o menu **Admin**: contas criadas, progresso da entrega, último acesso e as escolhas de tema de cada participante. O conteúdo dos casos não é exposto. Para tornar um usuário administrador:
 
 ```sql
 insert into public.administradores (user_id) select id from auth.users where email = 'EMAIL-DO-ADMINISTRADOR';

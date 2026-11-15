@@ -114,7 +114,7 @@ function atualizarNav() {
   if (!nav) return;
   const prog = progresso(validar(estado.caso));
   const atual = rotaAtual();
-  const rotas = estado.admin ? [...ROTAS, { id: 'turma', titulo: 'Turma (só você vê)', icone: '☷', separador: true }] : ROTAS;
+  const rotas = estado.admin ? [...ROTAS, { id: 'turma', titulo: 'Admin', icone: '☷', separador: true }] : ROTAS;
   nav.replaceChildren(...rotas.map(r => {
     const p = r.etapa ? prog.porEtapa[r.etapa] : null;
     return h('a', { href: `#/${r.id}`, class: `nav-item ${atual === r.id ? 'ativo' : ''} ${r.separador ? 'separador' : ''}`, 'aria-current': atual === r.id ? 'page' : null },
@@ -817,9 +817,9 @@ function vistaTurma() {
   const carregar = () => api.painelAdmin().then(desenhar).catch(e => corpo.replaceChildren(h('p', { class: 'erro' }, `Não foi possível carregar: ${e.message}`)));
   carregar();
   return h('div', { class: 'vista larga' },
-    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Administração · visível somente para você'), h('h1', {}, 'Turma'),
+    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Administração · visível somente para você'), h('h1', {}, 'Admin'),
       h('p', { class: 'lead' }, 'Quem criou conta, quanto do roteiro já concluiu, quando acessou pela última vez e como personalizou o visual. O conteúdo dos casos dos colegas não é exibido.'),
-      h('div', { class: 'acoes' }, botao('Atualizar', carregar, 'fantasma'))),
+      h('div', { class: 'acoes' }, botao('Atualizar Progresso da Turma', carregar, 'fantasma'))),
     corpo);
 }
 
