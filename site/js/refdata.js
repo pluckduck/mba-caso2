@@ -81,10 +81,10 @@ export const IPEA = {
   titulo: 'Carta de Conjuntura nº 71 — Nota de Conjuntura 24 — Visão geral da conjuntura',
   instituicao: 'Instituto de Pesquisa Econômica Aplicada (Ipea)',
   periodo: '2º trimestre de 2026',
-  publicacao: '8 de julho de 2026',
+  publicacao: 'junho de 2026',
   url: 'https://www.ipea.gov.br/cartadeconjuntura/',
   citacao: 'SANTOS, Claudio Hamilton Matos dos; AMITRANO, Cláudio Roberto; ARAUJO, Mônica Mora y. Visão geral da conjuntura. Carta de Conjuntura, Brasília: Ipea, n. 71, Nota de Conjuntura 24, 2º trim. 2026.',
-  nota: 'A capa do arquivo de apoio indica divulgação em 08/06/2026, mas o site do Ipea registra a publicação em 08/07/2026 e o texto menciona fatos de até o fim de junho de 2026 (Copom de 16–17/06 e Focus de 26/06). Ao citar, use "2º trimestre de 2026" como período de referência.',
+  nota: 'A data de publicação segue a capa do arquivo de apoio (08/06/2026). O site do Ipea registra a publicação em 08/07/2026, e o texto menciona fatos de até o fim de junho de 2026 (Copom de 16–17/06 e Focus de 26/06). Ao citar, use "2º trimestre de 2026" como período de referência.',
   temas: ['Atividade', 'Projeções PIB', 'Preços', 'Juros e câmbio', 'Trabalho e renda', 'Crédito e famílias', 'Fiscal', 'Setor externo'],
   registros: [
     // Atividade (observado)
@@ -341,12 +341,12 @@ export function referenciasPublicadas(varId) {
     const linha = FOCUS.anual.find(x => x.id === v.focus);
     for (const ano of FOCUS.anos.slice(0, 2)) {
       const c = linha?.v[ano];
-      if (c) out.push({ valor: c.hoje, rotulo: `Focus ${ano}`, fonte: `Focus (BCB), ${FOCUS.dataTxt}`, periodo: `fim de ${ano}`, origem: 'focus' });
+      if (c) out.push({ valor: c.hoje, casas: linha.casas ?? 2, rotulo: `Focus ${ano}`, fonte: `Focus (BCB), ${FOCUS.dataTxt}`, periodo: `fim de ${ano}`, origem: 'focus' });
     }
   }
   if (v.ipea) {
     for (const r of IPEA.registros.filter(x => x.chave === v.ipea)) {
-      out.push({ valor: r.valor, rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `${IPEA.curto} (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
+      out.push({ valor: r.valor, casas: casasDe(r.valor), rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `${IPEA.curto} (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
     }
   }
   return out;

@@ -101,7 +101,7 @@ input[type="color"] { width: 40px; height: 32px; padding: 2px; flex: none; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .8rem; margin: .6rem 0; }
 .kpi { background: var(--tom); border-radius: var(--raio); padding: .8rem; }
 .kpi-nome { font-weight: 700; display: block; } .kpi-nome small { display: block; font-weight: 400; color: var(--c-suave); font-size: .75rem; }
-.kpi-vals { display: flex; gap: 1.2rem; margin-top: .4rem; } .kpi-vals small { display: block; color: var(--c-suave); font-size: .75rem; }
+.kpi-vals { display: flex; flex-wrap: wrap; gap: .2rem 1.1rem; margin-top: .4rem; } .kpi-vals > div { white-space: nowrap; } .kpi-vals small { display: block; color: var(--c-suave); font-size: .75rem; }
 .kpi-vals strong { font-size: 1.35rem; font-family: var(--f-titulo); font-variant-numeric: tabular-nums; }
 .tend { font-size: .75rem; margin-left: .3rem; font-weight: 700; white-space: nowrap; } .tend.alta { color: var(--c-adverso); } .tend.queda { color: var(--c-base); } .tend.estavel { color: var(--c-suave); }
 

@@ -1,0 +1,13 @@
+<!-- Modelo do e-mail "Reset Password" (Supabase › Authentication › Emails › Templates).
+     Assunto sugerido: Estudo de Caso 2 — redefinição de senha
+     Só pode ser aplicado quando o projeto usa um servidor de e-mail próprio (SMTP); com o remetente padrão
+     do Supabase, projetos gratuitos novos não podem editar os modelos. -->
+<div style="font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; color: #1B2430; max-width: 520px">
+  <p style="font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: #5B6675; margin: 0 0 4px">MBA Gestão Comercial e SalesTech · Cenários Econômicos em Vendas</p>
+  <h2 style="font-family: Georgia, serif; font-size: 22px; margin: 0 0 16px">Estudo de Caso 2 — redefinição de senha</h2>
+  <p>Recebemos um pedido para redefinir a senha da conta <strong>{{ .Email }}</strong> no aplicativo do Estudo de Caso 2.</p>
+  <p style="margin: 24px 0"><a href="{{ .ConfirmationURL }}" style="background: #14305A; color: #FFFFFF; text-decoration: none; padding: 12px 20px; border-radius: 6px; font-weight: bold">Definir nova senha</a></p>
+  <p>O link abre o aplicativo já na tela de nova senha. Se o botão não funcionar, copie este endereço no navegador:</p>
+  <p style="word-break: break-all; font-size: 14px; color: #5B6675">{{ .ConfirmationURL }}</p>
+  <p style="font-size: 14px; color: #5B6675">Se você não pediu a troca de senha, ignore esta mensagem: nada muda na sua conta.</p>
+</div>

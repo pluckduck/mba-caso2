@@ -33,19 +33,20 @@ function tabelaIpea(aoUsar, filtroInicial) {
   const corpo = h('tbody');
   const chips = h('div', { class: 'chips' });
   const desenhar = () => {
-    chips.replaceChildren(...['Todos', ...IPEA.temas].map(t => h('button', { class: `chip ${estado.tema === t && !estado.chave ? 'ativo' : ''}`, onclick: () => { estado.tema = t; estado.chave = null; desenhar(); } }, t)),
-      estado.chave ? h('button', { class: 'chip ativo', onclick: () => { estado.chave = null; desenhar(); } }, 'Relacionados à variável ✕') : null);
+    // replaceChildren escreve "null" na tela se receber um valor vazio: por isso as listas são filtradas.
+    chips.replaceChildren(...[...['Todos', ...IPEA.temas].map(t => h('button', { class: `chip ${estado.tema === t && !estado.chave ? 'ativo' : ''}`, onclick: () => { estado.tema = t; estado.chave = null; desenhar(); } }, t)),
+      estado.chave ? h('button', { class: 'chip ativo', onclick: () => { estado.chave = null; desenhar(); } }, 'Relacionados à variável ✕') : null].filter(Boolean));
     const q = estado.busca.trim().toLowerCase();
     const lista = IPEA.registros.filter(r => (estado.chave ? r.chave === estado.chave : (estado.tema === 'Todos' || r.tema === estado.tema))
       && (!q || `${r.indicador} ${r.nota} ${r.periodo}`.toLowerCase().includes(q)));
-    corpo.replaceChildren(...lista.map(r => h('tr', {},
+    corpo.replaceChildren(...[...lista.map(r => h('tr', {},
       h('td', {}, h('strong', {}, r.indicador), h('div', { class: 'nota' }, r.nota)),
       h('td', { class: 'num' }, valorIpea(r)),
       h('td', {}, r.periodo),
       h('td', {}, selo(r.natureza, r.natureza === 'Projeção publicada' ? 'proj' : (r.natureza === 'Dado observado' ? 'obs' : 'ana'))),
       h('td', { class: 'num' }, `p. ${r.pagina}`),
       aoUsar ? h('td', {}, botao('Usar', () => aoUsar(evidenciaIpea(r)), 'pequeno')) : null)),
-      lista.length ? null : h('tr', {}, h('td', { colspan: 6, class: 'vazio' }, 'Nenhum indicador encontrado com esse filtro.')));
+      lista.length ? null : h('tr', {}, h('td', { colspan: 6, class: 'vazio' }, 'Nenhum indicador encontrado com esse filtro.'))].filter(Boolean));
   };
   desenhar();
   return h('div', {},

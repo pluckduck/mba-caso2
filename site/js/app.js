@@ -2,7 +2,7 @@
 import * as api from './api.js';
 import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } from './ui.js';
 import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
-import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste } from './themes.js';
+import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste, luminancia, misturar } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
   horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea } from './modelo.js';
 import { construir, exportarPptx, notasApresentador, renderHTML, TITULOS } from './slides.js';
@@ -243,7 +243,7 @@ function painel() {
   const proxima = ETAPAS.find(e => prog.porEtapa[e.n].ok < prog.porEtapa[e.n].total);
   const destaque = id => { const l = FOCUS.anual.find(x => x.id === id); return h('div', { class: 'kpi' },
     h('span', { class: 'kpi-nome' }, l.indicador, h('small', {}, l.unidade)),
-    h('div', { class: 'kpi-vals' }, [2026, 2027].map(a => h('div', {}, h('small', {}, a), h('strong', {}, fmt(l.v[a].hoje)), h('span', { class: `tend ${l.v[a].comp}` }, { alta: '▲', queda: '▼', estavel: '＝' }[l.v[a].comp]))))); };
+    h('div', { class: 'kpi-vals' }, FOCUS.anos.slice(0, 2).filter(a => l.v[a]).map(a => h('div', {}, h('small', {}, a), h('strong', {}, fmt(l.v[a].hoje)), h('span', { class: `tend ${l.v[a].comp}` }, { alta: '▲', queda: '▼', estavel: '＝' }[l.v[a].comp]))))); };
   const ip = id => IPEA.registros.find(r => r.id === id);
   return h('div', { class: 'vista' },
     h('header', { class: 'heroi' },
@@ -449,7 +449,25 @@ function abrirEscolha(v) {
     grupo('Relatório Focus (Banco Central)', `edição de ${ed.edicao(c.edicoes.focus)?.rotulo || FOCUS.dataTxt} · mediana das expectativas`, ops.focus.map(x => opcao(x.ev.periodo, x.ev, obsFocus(x)))),
     grupo('Carta de Conjuntura (Ipea)', `${ed.edicao(c.edicoes.ipea)?.rotulo || IPEA.periodo}`, ops.ipea.map(x => opcao(`${x.registro.indicador} · ${x.registro.periodo}`, x.ev, `${x.registro.natureza.toLowerCase()}, p. ${x.registro.pagina}`, x.registro.nota))),
     h('div', { class: 'escolha-pe' }, botao('Procurar em todas as séries do Focus e do Ipea', () => { fechar(); abrirBusca(v); }, 'contorno'), botao('Cancelar', () => fechar())));
-  fechar = modal(`Escolher outro dado: ${v.nome}`, corpo, { largo: true });
+  fechar = modal(`${v.dado ? 'Escolher outro dado' : 'Escolher dado'}: ${v.nome}`, corpo, { largo: true });
+}
+// Troca do tipo de uma variável: não permite repetir a mesma variável em dois cartões e não deixa o dado
+// da variável anterior valendo para a nova (o que foi registrado para o tipo antigo é apagado, com confirmação).
+function trocarTipo(v, tipoAntes, novoTipo, seletor) {
+  const c = estado.caso;
+  const desfazer = () => { v.tipo = tipoAntes; seletor.value = tipoAntes; };
+  if (novoTipo === tipoAntes) return;
+  if (novoTipo && novoTipo !== 'outra' && c.variaveis.some(x => x !== v && x.tipo === novoTipo)) {
+    desfazer(); aviso('Esta variável já está em outro cartão. Escolha outra ou remova o cartão repetido.', 'erro'); return;
+  }
+  const temCenarios = CENARIOS.some(s => c.cenarios[s.id].traj[v.uid] || c.impactos[s.id].cadeias[v.uid]) || v.uid in c.simulador.sens;
+  if ((temEvidenciaVar(v) || temCenarios) && !confirm('Trocar o tipo apaga o que foi registrado para a variável anterior neste cartão: dado, fonte, data, período e tendência, além dos valores dela nos cenários e nos impactos (etapas 3 e 4). A implicação que você escreveu é mantida, para você revisar. Continuar?')) { desfazer(); return; }
+  Object.assign(v, { dado: '', valorNum: null, natureza: '', fonte: '', publicacao: '', periodo: '', tendencia: '', origem: null });
+  for (const s of CENARIOS) { delete c.cenarios[s.id].traj[v.uid]; delete c.impactos[s.id].cadeias[v.uid]; }
+  delete c.simulador.sens[v.uid];
+  const cat = catalogo(novoTipo);
+  if (cat && novoTipo !== 'outra') { v.nome = cat.nome; v.unidade = cat.unidade; autoPreencher(v, cat); }
+  mudou(); redesenhar();
 }
 function roteiro(v) {
   const cat = catalogo(v.tipo);
@@ -463,11 +481,12 @@ function cartaoVariavel(v, i) {
   const cat = catalogo(v.tipo);
   const ext = Boolean(cat?.externa);
   const temSerie = Boolean(cat && (cat.focus || cat.ipea));
+  const tipoAntes = v.tipo;
   const faixa = ext ? null : faixaOrigem(v, cat);
   const manual = () => { faixa?.esquecer(); mudou(); };
   return h('section', { class: `cartao variavel ${ext ? 'externa' : ''}` },
     h('div', { class: 'cab-linha' }, h('h3', {}, `Variável ${i + 1}`, v.nome ? ` — ${v.nome}` : '', ext ? selo('Fonte externa', 'externa') : null),
-      h('div', { class: 'acoes' }, ext ? null : botao(temSerie ? 'Escolher outro dado' : 'Buscar no Focus ou no Ipea', () => abrirEscolha(v), temSerie && v.dado ? 'contorno pequeno' : 'primario pequeno'),
+      h('div', { class: 'acoes' }, ext ? null : botao(temSerie ? (v.dado ? 'Escolher outro dado' : 'Escolher dado') : 'Buscar no Focus ou no Ipea', () => abrirEscolha(v), temSerie && v.dado ? 'contorno pequeno' : 'primario pequeno'),
         botao('Remover', () => { if (!temDadosVar(v) || confirm('Remover esta variável e suas evidências?')) { removerVariavel(v.uid); mudou(); redesenhar(); } }, 'fantasma pequeno'))),
     ext ? h('div', { class: 'aviso-externa' },
       h('strong', {}, 'Esta variável não consta do Focus nem da Carta de Conjuntura'),
@@ -475,7 +494,7 @@ function cartaoVariavel(v, i) {
       h('div', { class: 'onde-buscar' }, h('span', {}, 'Onde buscar:'), cat.fontes.map(f => h('a', { href: f.url, target: '_blank', rel: 'noopener' }, `${f.nome} ↗`)))) : null,
     faixa,
     h('div', { class: 'grade-3' },
-      C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...GRUPOS.flatMap(g => variaveisDoGrupo(g.id).map(x => [x.id, `${g.nome} — ${x.nome}${x.externa ? ' (fonte externa)' : ''}`])), ['outra', 'Outra variável']], aoMudar: val => { const cat = catalogo(val); if (cat && val !== 'outra') { v.nome = cat.nome; v.unidade = cat.unidade; autoPreencher(v, cat); } mudou(); redesenhar(); } }),
+      C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...GRUPOS.flatMap(g => variaveisDoGrupo(g.id).map(x => [x.id, `${g.nome} — ${x.nome}${x.externa ? ' (fonte externa)' : ''}`])), ['outra', 'Outra variável']], aoMudar: (val, e) => trocarTipo(v, tipoAntes, val, e.target) }),
       C({ rotulo: 'Nome da variável', obj: v, chave: 'nome', tipo: 'text', placeholder: 'Ex.: Taxa de juros (Selic)' }),
       C({ rotulo: 'Unidade', obj: v, chave: 'unidade', tipo: 'text', placeholder: '%, % a.a., R$/US$…' })),
     h('div', { class: 'grade-2' },
@@ -529,7 +548,7 @@ function etapa3() {
       const entrada = h('input', { type: 'number', step: cat.passo, value: t.valor, 'aria-label': `${v.nome} no ${s.nome}`, oninput: e => { t.valor = e.target.value; faixa.value = e.target.value; pintar(); mudou(); } });
       const faixa = h('input', { type: 'range', min: cat.min, max: cat.max, step: cat.passo, value: numSimples(t.valor) ?? numSimples(v.valorNum) ?? (cat.min + cat.max) / 2, 'aria-label': `Ajuste de ${v.nome} no ${s.nome}`, oninput: e => { t.valor = e.target.value; entrada.value = e.target.value; pintar(); mudou(); } });
       const sel = refs.length ? h('select', { 'aria-label': 'Usar referência publicada', onchange: e => { if (e.target.value === '') return; t.valor = String(refs[Number(e.target.value)].valor); entrada.value = t.valor; faixa.value = t.valor; e.target.value = ''; pintar(); mudou(); } },
-        h('option', { value: '' }, 'Usar referência publicada…'), refs.map((r, i) => h('option', { value: i }, `${r.rotulo}: ${fmt(r.valor)} (${r.periodo})`))) : null;
+        h('option', { value: '' }, 'Usar referência publicada…'), refs.map((r, i) => h('option', { value: i }, `${r.rotulo}: ${fmt(r.valor, r.casas)} (${r.periodo})`))) : null;
       pintar();
       return h('div', { class: `cen-col ${s.id}` }, h('h4', {}, s.curto),
         h('div', { class: 'valor-linha' }, entrada, h('span', { class: 'unid' }, v.unidade)), faixa, tag, sel,
@@ -537,7 +556,7 @@ function etapa3() {
     };
     return h('section', { class: 'cartao' },
       h('div', { class: 'cab-linha' }, h('h3', {}, v.nome), h('span', { class: 'ajuda' }, v.dado ? `Evidência registrada: ${v.dado} (${v.periodo || 'período não informado'})` : 'Sem evidência registrada na etapa 2')),
-      refs.length ? h('p', { class: 'refs' }, 'Referências publicadas: ', refs.map(r => h('span', { class: `selo ${r.origem}`, title: `${r.fonte} — ${r.periodo}` }, `${r.rotulo}: ${fmt(r.valor)}`))) : h('p', { class: 'ajuda' }, 'Não há projeção publicada para esta variável no Focus nem na Carta de Conjuntura; os valores serão marcados como hipótese do autor. Se a fonte externa publicar projeções, cite-as na justificativa.'),
+      refs.length ? h('p', { class: 'refs' }, 'Referências publicadas: ', refs.map(r => h('span', { class: `selo ${r.origem}`, title: `${r.fonte} — ${r.periodo}` }, `${r.rotulo}: ${fmt(r.valor, r.casas)}`))) : h('p', { class: 'ajuda' }, 'Não há projeção publicada para esta variável no Focus nem na Carta de Conjuntura; os valores serão marcados como hipótese do autor. Se a fonte externa publicar projeções, cite-as na justificativa.'),
       h('div', { class: 'grade-3 cen-grade' }, CENARIOS.map(coluna)));
   };
   const listar = (s, tipo) => {
@@ -754,7 +773,7 @@ function vistaDados() {
   return h('div', { class: 'vista larga' },
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Arquivos de apoio do estudo de caso'), h('h1', {}, 'Dados do Relatório Focus e da Carta de Conjuntura'),
       h('p', { class: 'lead' }, `Dados transcritos das edições em uso neste caso: Focus de ${FOCUS.dataTxt} e ${IPEA.curto} (${IPEA.periodo}). Confira sempre os valores no documento original antes de citá-los. `, h('a', { href: '#/etapa/2' }, 'Trocar de edição na etapa 2'), '.')),
-    h('section', { class: 'cartao' }, explorador({ aoUsar: usar, origem: estado.origemDados === 'supabase' ? 'Dados carregados do banco de dados (Supabase).' : 'Dados carregados do arquivo incorporado ao aplicativo.' })));
+    h('section', { class: 'cartao' }, explorador({ aoUsar: usar })));
 }
 
 // ---------- Tema ----------
@@ -838,7 +857,12 @@ function vistaTema() {
   const atualizar = (redesenharPainel = false, salvar = true) => {
     const tema = temaAtual();
     previa.replaceChildren(montarSlide(construir(c, tema).slides[slidePrev], tema));
-    const pares = [['Texto sobre o fundo', tema.cores.texto, tema.cores.fundo], ['Texto sobre cartões', tema.cores.texto, tema.cores.superficie], ['Texto sobre a cor principal', tema.cores.sobrePrimaria, tema.cores.primaria], ['Texto secundário', tema.cores.suave, tema.cores.fundo]];
+    const pares = [['Texto sobre o fundo', tema.cores.texto, tema.cores.fundo], ['Texto sobre cartões', tema.cores.texto, tema.cores.superficie], ['Texto sobre a cor principal', tema.cores.sobrePrimaria, tema.cores.primaria], ['Texto secundário', tema.cores.suave, tema.cores.fundo],
+      // Valores de cada cenário no slide 3: a cor do cenário, como o gerador de slides a aplica sobre os cartões.
+      ...[['base', 'Valores do cenário base'], ['favoravel', 'Valores do cenário favorável'], ['adverso', 'Valores do cenário adverso']].map(([k, n]) => {
+        const cor = tema.cores[k];
+        return [`${n} nos cartões`, cor === tema.cores.fundo ? tema.cores.texto : (luminancia(tema.cores.superficie) < 0.35 ? cor : misturar(cor, tema.cores.texto, 0.25)), tema.cores.superficie];
+      })];
     contr.replaceChildren(...pares.map(([n, a, b]) => { const r = contraste(a, b); return h('span', { class: `selo ${r >= 4.5 ? 'obs' : 'alerta'}`, title: 'Razão de contraste (recomendado: 4,5 ou mais)' }, `${n}: ${fmt(r, 1)}:1 ${r >= 4.5 ? '✓' : '— baixo'}`); }));
     if (redesenharPainel) { desenharMeus(); desenharGaleria(); desenharEditor(); }
     desenharSalvar();
