@@ -30,6 +30,8 @@ Cada caso usa uma edição de cada relatório. Casos novos começam na mais rece
 Não exige nova publicação do site:
 
 1. Transcrever o relatório em `supabase/edicoes/<id>.json` (mesmo formato de `focus-2026-11-06.json`), conferindo os números contra o PDF.
+   - Na Carta do Ipea, só ligue um registro a uma variável (`chave`) se ele estiver na mesma unidade dela; projeção ligada a variável precisa de `ano`; o mesmo `id` entre edições só vale para o mesmo indicador. As regras e o motivo estão em `docs/conferencia-dados.md`.
+   - `npm run conferir` precisa terminar sem erros antes de qualquer carga no banco.
 2. `node scripts/gerar-edicoes.mjs <id>` gera o SQL da edição; executá-lo no Supabase.
 3. `npm run edicoes` atualiza `supabase/edicoes.sql` (todas as edições), para manter o repositório em dia.
 
@@ -37,7 +39,7 @@ Não exige nova publicação do site:
 
 O quadro de cada variável compara a projeção com o último valor medido (Selic, PTAX, IPCA em 12 meses, PIB e FBCF), na data da edição do relatório em uso no caso. Esses valores ficam na tabela `observados` (migração `005_observados.sql`), com cópia embutida em `OBSERVADOS` (`site/js/refdata.js`), usada no modo local ou enquanto a tabela não existir.
 
-Para carregar um valor novo: acrescente a linha em `OBSERVADOS`, rode `npm run observados` (atualiza `supabase/observados.sql`) e execute esse SQL no banco. Séries diárias (Selic e PTAX) precisam também do valor de quatro semanas antes da data da edição, que é a janela de comparação.
+Para carregar um valor novo: acrescente a linha em `OBSERVADOS`, rode `npm run conferir` e `npm run observados` (atualiza `supabase/observados.sql`) e execute esse SQL no banco. Séries diárias (Selic e PTAX) precisam também do valor de quatro semanas antes da data da edição, que é a janela de comparação.
 
 A edição de 23/10/2026 e a Carta nº 71 também ficam em `site/js/refdata.js`, como reserva para o modo local ou para falha do banco. As tabelas `fontes_referencia`, `focus_expectativas` e `ipea_indicadores` (e `supabase/seed.sql`) pertencem à versão anterior do site e deixam de ser lidas pela versão atual.
 

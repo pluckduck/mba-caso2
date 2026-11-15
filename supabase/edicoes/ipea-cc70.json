@@ -562,7 +562,7 @@
    "natureza": "Dado observado",
    "pagina": 10,
    "nota": "7,3% maior na comparação interanual. No 4º tri/2025: R$ 368,5 bilhões.",
-   "chave": "renda",
+   "chave": null,
    "ano": null,
    "ordem": 36
   },
@@ -581,7 +581,7 @@
    "ordem": 37
   },
   {
-   "id": "primario_2026",
+   "id": "primario_gc_2026",
    "tema": "Fiscal",
    "indicador": "Resultado primário do governo central — expectativa de mercado (Prisma Fiscal)",
    "valor": -0.49,

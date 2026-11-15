@@ -1,5 +1,5 @@
 // Modelo do caso: espelha as cinco seções do roteiro do Estudo de Caso 2 e os critérios de validação da entrega.
-import { VARIAVEIS, FOCUS, IPEA, SERIES_OBS, OBSERVADOS, fmt, comUnidade, valorIpea } from './refdata.js';
+import { VARIAVEIS, FOCUS, IPEA, SERIES_OBS, OBSERVADOS, fmt, comUnidade, valorIpea, registrosIpeaDe } from './refdata.js';
 
 export const CENARIOS = [
   { id: 'base', nome: 'Cenário base', curto: 'Base', desc: 'Evolução considerada mais provável, fundamentada nas expectativas consultadas.' },
@@ -209,7 +209,8 @@ export const serieDe = tipo => Object.keys(SERIES_OBS).find(k => SERIES_OBS[k].v
 export const SETA = { sobe: '▲', cai: '▼', estavel: '=' };
 const casasDoNum = n => Math.min(2, Math.max(1, String(n).split('.')[1]?.length || 0));
 const menos = s => String(s).replace(/(^|[\s(])-(?=\d)/g, '$1−');   // sinal de menos tipográfico, igual ao das diferenças
-const dirDe = (a, b) => (a === null || a === undefined || b === null || b === undefined ? null : Math.abs(a - b) < 1e-9 ? 'estavel' : a > b ? 'sobe' : 'cai');
+// Direção de a em relação a b, na precisão em que os números são mostrados: uma diferença que arredonda para zero é estabilidade.
+const dirDe = (a, b, casas = 9) => (a === null || a === undefined || b === null || b === undefined ? null : Math.abs(a - b) < 0.5 * 10 ** -casas ? 'estavel' : a > b ? 'sobe' : 'cai');
 function deltaTxt(d, unidade, casas) {
   const s = d > 0 ? '+' : '−', v = fmt(Math.abs(d), casas), u = String(unidade || '').trim();
   if (u.startsWith('%') || /^varia/i.test(u)) return `${s}${v} p.p.`;
@@ -260,7 +261,7 @@ export function quadro(v) {
   let hoje = null;
   if (obs) {
     const { meta, atual, anterior } = obs, nivel = meta.modo === 'nivel';
-    const dir = dirDe(atual.valor, anterior?.valor);
+    const dir = dirDe(atual.valor, anterior?.valor, meta.casas);
     hoje = { num: atual.valor, valor: menos(comUnidade(atual.valor, meta.unidade, meta.casas)), dir,
       delta: !dir ? '' : dir === 'estavel' ? (nivel ? 'estável em 4 semanas' : 'estável') : `${deltaTxt(atual.valor - anterior.valor, meta.unidade, meta.casas)}${nivel ? ' em 4 semanas' : ''}`,
       curta: `${atual.curto}${anterior ? ` · antes ${menos(fmt(anterior.valor, meta.casas))}` : ''}`,
@@ -273,9 +274,13 @@ export function quadro(v) {
   let proj = null, rev = null;
   if (ehProj) {
     const casasP = o?.fonte === 'focus' ? 2 : casasDoNum(num);
-    const comparavel = Boolean(obs);
-    const dir = comparavel ? dirDe(num, hoje.num) : null;
+    // Só se compara a projeção com o dado de hoje quando as duas são a mesma medida. Taxas e cotações (modo "nivel")
+    // valem para qualquer período; variações acumuladas (IPCA, PIB, FBCF) só se comparam com projeções para o ano
+    // inteiro, nunca com a variação de um mês ou de um trimestre.
+    const anual = o?.fonte === 'focus' ? o.tipo === 'anual' : o?.fonte === 'ipea' ? Boolean(o.ano) : /^(fim de )?\d{4}$/.test(String(v.periodo || '').trim());
+    const comparavel = Boolean(obs) && (obs.meta.modo === 'nivel' || anual);
     const casasD = comparavel ? Math.max(casasP, hoje.casas) : casasP;
+    const dir = comparavel ? dirDe(num, hoje.num, casasD) : null;
     const origemCurta = o?.fonte === 'focus' ? `Focus de ${dataCurta(FOCUS.data)}` : o?.fonte === 'ipea' ? `Carta nº ${IPEA.numero} (Ipea)` : '';
     proj = { num, valor: v.dado || comUnidade(num, unidade, casasP), dir,
       delta: !dir ? '' : dir === 'estavel' ? 'no nível de hoje' : `${deltaTxt(num - hoje.num, unidade, casasD)} em relação a hoje`,
@@ -290,11 +295,14 @@ export function quadro(v) {
         longa = `${fmt(cel.h1, casasP)} há 1 semana · ${fmt(cel.h4, casasP)} há 4 semanas${cel.resp ? ` · ${cel.resp} respondentes` : ''}`;
       }
     } else if (o?.fonte === 'ipea' && IPEA.anterior && o.edicao === IPEA.edicao) {
-      const r = IPEA.anterior.registros.find(x => x.id === o.registro) || (o.chave ? IPEA.anterior.registros.find(x => x.chave === o.chave && (x.ano || null) === (o.ano || null)) : null);
+      // O registro da Carta anterior só serve de comparação se medir a mesma coisa: mesmo indicador, não apenas a mesma variável e o mesmo ano.
+      const atual = IPEA.registros.find(x => x.id === o.registro) || null;
+      const mesmo = x => !atual || !x.indicador || x.indicador === atual.indicador;
+      const r = IPEA.anterior.registros.find(x => x.id === o.registro && mesmo(x)) || (o.chave ? IPEA.anterior.registros.find(x => x.chave === o.chave && (x.ano || null) === (o.ano || null) && mesmo(x)) : null);
       if (r) { ant = r.valor; curta = IPEA.anterior.numero ? `vs. Carta nº ${IPEA.anterior.numero}` : 'vs. Carta anterior'; longa = `${fmt(r.valor, casasP)} na ${IPEA.anterior.curto}`; }
     }
     if (ant !== null) {
-      const dirR = dirDe(num, ant);
+      const dirR = dirDe(num, ant, casasP);
       rev = { num: ant, valor: `era ${menos(fmt(ant, casasP))}`, dir: dirR, delta: dirR === 'estavel' ? 'sem alteração' : `${deltaTxt(num - ant, unidade, casasP)}${o.fonte === 'focus' ? ' em 4 semanas' : ' desde a Carta anterior'}`,
         deltaCurto: dirR === 'estavel' ? 'sem alteração' : deltaTxt(num - ant, unidade, casasP), curta, longa };
     }
@@ -372,7 +380,7 @@ export function sugestaoEvidencia(cat, ident) {
     if (anos.length) return evidenciaFocus(linha, anos[0], 'anual');
   }
   if (cat.ipea) {
-    const rs = IPEA.registros.filter(r => r.chave === cat.ipea);
+    const rs = registrosIpeaDe(cat);
     const r = rs.find(x => x.ano === ano) || rs.filter(x => x.ano).sort((a, b) => Math.abs(a.ano - ano) - Math.abs(b.ano - ano))[0] || rs[0];
     if (r) return evidenciaIpea(r);
   }
@@ -388,7 +396,7 @@ export function opcoesEvidencia(cat) {
     for (const a of FOCUS.anos) if (anual?.v[a]) out.focus.push({ linha: anual, periodo: a, tipo: 'anual', ev: evidenciaFocus(anual, a, 'anual'), cel: anual.v[a] });
     for (const p of FOCUS.periodosMensais) if (mensal?.v[p]) out.focus.push({ linha: mensal, periodo: p, tipo: 'mensal', ev: evidenciaFocus(mensal, p, 'mensal'), cel: mensal.v[p] });
   }
-  if (cat.ipea) for (const r of IPEA.registros.filter(x => x.chave === cat.ipea)) out.ipea.push({ registro: r, ev: evidenciaIpea(r) });
+  for (const r of registrosIpeaDe(cat)) out.ipea.push({ registro: r, ev: evidenciaIpea(r) });
   return out;
 }
 

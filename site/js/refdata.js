@@ -133,7 +133,7 @@ export const IPEA = {
 
     // Trabalho e renda
     { id: 'desocupacao', tema: 'Trabalho e renda', indicador: 'Taxa de desocupação (PNAD Contínua)', valor: 5.8, unidade: '%', periodo: 'trimestre encerrado em abril de 2026', natureza: OBS, pagina: 18, nota: 'Recuo de 0,8 p.p. ante o mesmo período de 2025; mínimos históricos.', chave: 'desemprego' },
-    { id: 'massa_salarial', tema: 'Trabalho e renda', indicador: 'Massa salarial real — média mensal', valor: 377.6, unidade: 'R$ bilhões', periodo: '1º trimestre de 2026', natureza: OBS, pagina: 18, nota: 'Alta de 7,1% ante o 1º tri/2025 (R$ 25 bilhões a mais).', chave: 'renda' },
+    { id: 'massa_salarial', tema: 'Trabalho e renda', indicador: 'Massa salarial real — média mensal', valor: 377.6, unidade: 'R$ bilhões', periodo: '1º trimestre de 2026', natureza: OBS, pagina: 18, nota: 'Alta de 7,1% ante o 1º tri/2025 (R$ 25 bilhões a mais).' },
     { id: 'massa_salarial_var', tema: 'Trabalho e renda', indicador: 'Massa salarial real — variação interanual', valor: 7.1, unidade: '%', periodo: '1º trimestre de 2026', natureza: OBS, pagina: 18, nota: 'No trimestre móvel até abril/2026, a massa habitual cresceu 6,5%.', chave: 'renda' },
     { id: 'renda_disponivel', tema: 'Trabalho e renda', indicador: 'Renda disponível bruta das famílias — crescimento real', valor: 4.6, unidade: '% a.a.', periodo: 'desde o aperto monetário (set/2024)', natureza: OBS, pagina: 5, nota: 'Valor aproximado informado pela fonte ("próxima de 4,6% ao ano").', chave: 'renda' },
 
@@ -149,7 +149,7 @@ export const IPEA = {
     { id: 'primario_2026', tema: 'Fiscal', indicador: 'Resultado primário do setor público — expectativa de mercado', valor: -0.5, unidade: '% do PIB', periodo: '2026', natureza: PROJ, pagina: 6, nota: 'Mediana das expectativas de mercado citada pelo Ipea; para 2027, déficit de 0,4% do PIB.', chave: 'primario', ano: 2026 },
 
     // Setor externo
-    { id: 'real_efetivo', tema: 'Setor externo', indicador: 'Valorização do real (câmbio efetivo real)', valor: 4, unidade: '%', periodo: 'janeiro a abril de 2026', natureza: OBS, pagina: 6, nota: 'Associada ao aumento do valor das exportações de petróleo após o choque de oferta.', chave: 'cambio' },
+    { id: 'real_efetivo', tema: 'Setor externo', indicador: 'Valorização do real (câmbio efetivo real)', valor: 4, unidade: '%', periodo: 'janeiro a abril de 2026', natureza: OBS, pagina: 6, nota: 'Associada ao aumento do valor das exportações de petróleo após o choque de oferta.' },
   ],
   // Guia de leitura: paráfrases do argumento da Carta, com a página de origem.
   argumentos: [
@@ -180,6 +180,7 @@ const o = (serie, data, valor, rotulo, curto, disponivel_em = null) => ({ serie,
 export const OBSERVADOS = [
   o('selic', '2026-09-16', 13.75, 'Copom de 16/09/2026', 'Copom, 16/9', '2026-09-16'),
   o('selic', '2026-11-04', 13.75, 'Copom de 04/11/2026', 'Copom, 4/11', '2026-11-04'),
+  o('cambio', '2026-09-17', 5.1521, 'PTAX de 17/09/2026', 'PTAX de 17/9', '2026-09-17'),
   o('cambio', '2026-09-25', 5.1991, 'PTAX de 25/09/2026', 'PTAX de 25/9', '2026-09-25'),
   o('cambio', '2026-10-09', 4.9892, 'PTAX de 09/10/2026', 'PTAX de 9/10', '2026-10-09'),
   o('cambio', '2026-10-23', 5.0377, 'PTAX de 23/10/2026', 'PTAX de 23/10', '2026-10-23'),
@@ -361,6 +362,19 @@ export function comUnidade(n, unidade = '', casas = 2) {
   return `${v} ${u}`;
 }
 const casasDe = n => (Number.isInteger(n) ? 0 : (String(n).split('.')[1]?.length || 1));
+
+// Uma série só pode servir de dado ou de referência para uma variável se as duas estiverem na mesma unidade:
+// percentual com percentual ("%", "% a.a.", "variação %"), R$/US$ com R$/US$, e assim por diante. Sem isso, um
+// percentual apareceria como cotação (por exemplo, "depreciação de 2,5%" ao lado de projeções do dólar em reais).
+export function classeUnidade(u) {
+  const t = String(u || '').trim();
+  if (/PIB/i.test(t)) return '% do PIB';
+  if (t.startsWith('%') || /^varia/i.test(t)) return '%';
+  return t;
+}
+export const unidadeCompativel = (a, b) => classeUnidade(a) === classeUnidade(b);
+// Registros da Carta em uso que podem ser usados para uma variável do catálogo.
+export const registrosIpeaDe = v => (v?.ipea ? IPEA.registros.filter(r => r.chave === v.ipea && unidadeCompativel(r.unidade, v.unidade)) : []);
 // Taxas em % sempre com ao menos uma casa decimal (2,0% e não 2%).
 export const valorIpea = r => comUnidade(r.valor, r.unidade, String(r.unidade || '').startsWith('%') ? Math.max(1, casasDe(r.valor)) : casasDe(r.valor));
 
@@ -377,7 +391,7 @@ export function referenciasPublicadas(varId) {
     }
   }
   if (v.ipea) {
-    for (const r of IPEA.registros.filter(x => x.chave === v.ipea)) {
+    for (const r of registrosIpeaDe(v)) {
       out.push({ valor: r.valor, casas: casasDe(r.valor), rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `${IPEA.curto} (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
     }
   }

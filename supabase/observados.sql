@@ -2,6 +2,7 @@
 insert into public.observados (serie, data, valor, rotulo, curto, disponivel_em, fonte) values
 ('selic', '2026-09-16', 13.75, 'Copom de 16/09/2026', 'Copom, 16/9', '2026-09-16', 'Banco Central do Brasil (Copom)'),
 ('selic', '2026-11-04', 13.75, 'Copom de 04/11/2026', 'Copom, 4/11', '2026-11-04', 'Banco Central do Brasil (Copom)'),
+('cambio', '2026-09-17', 5.1521, 'PTAX de 17/09/2026', 'PTAX de 17/9', '2026-09-17', 'Banco Central do Brasil (PTAX)'),
 ('cambio', '2026-09-25', 5.1991, 'PTAX de 25/09/2026', 'PTAX de 25/9', '2026-09-25', 'Banco Central do Brasil (PTAX)'),
 ('cambio', '2026-10-09', 4.9892, 'PTAX de 09/10/2026', 'PTAX de 9/10', '2026-10-09', 'Banco Central do Brasil (PTAX)'),
 ('cambio', '2026-10-23', 5.0377, 'PTAX de 23/10/2026', 'PTAX de 23/10', '2026-10-23', 'Banco Central do Brasil (PTAX)'),

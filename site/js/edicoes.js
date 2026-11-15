@@ -53,7 +53,7 @@ async function anteriorIpea(ed) {
   try {
     const linhas = await dadosDe(ant);
     if (!linhas) return null;
-    return { id: ant.id, numero: ant.metadados?.numero ?? null, curto: ant.metadados?.curto || `Carta ${ant.rotulo}`, registros: linhas.map(r => ({ id: r.id, valor: Number(r.valor), chave: r.chave || null, ano: r.ano || null })) };
+    return { id: ant.id, numero: ant.metadados?.numero ?? null, curto: ant.metadados?.curto || `Carta ${ant.rotulo}`, registros: linhas.map(r => ({ id: r.id, indicador: r.indicador, valor: Number(r.valor), chave: r.chave || null, ano: r.ano || null })) };
   } catch { return null; }
 }
 

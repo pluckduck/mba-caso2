@@ -600,7 +600,7 @@
    "natureza": "Dado observado",
    "pagina": 14,
    "nota": "Recorde da série.",
-   "chave": "renda",
+   "chave": null,
    "ano": null,
    "ordem": 38
   },
@@ -633,7 +633,7 @@
    "ordem": 40
   },
   {
-   "id": "renda_disponivel",
+   "id": "rndbf_12m",
    "tema": "Trabalho e renda",
    "indicador": "Renda Nacional Disponível Bruta das Famílias (BCB) — alta real em 12 meses",
    "valor": 3.8,
@@ -712,7 +712,7 @@
    "natureza": "Dado observado",
    "pagina": 24,
    "nota": "Citada pelo Ipea no contexto da queda das commodities energéticas (-11,7%) e metálicas (-3,9%).",
-   "chave": "cambio",
+   "chave": null,
    "ano": null,
    "ordem": 46
   }
