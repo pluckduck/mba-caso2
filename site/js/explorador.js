@@ -2,6 +2,7 @@
 import { h, botao, selo, faisca, barrasGrupos, linhas } from './ui.js';
 import { FOCUS, IPEA, fmt, valorIpea } from './refdata.js';
 import { evidenciaFocus, evidenciaIpea } from './modelo.js';
+import { dataCompleta } from './edicoes.js';
 
 const SETAS = { alta: ['▲', 'alta'], queda: ['▼', 'queda'], estavel: ['＝', 'estável'] };
 
@@ -58,19 +59,20 @@ function comparar() {
   const blocos = pares.map(([idF, nome, chave]) => {
     const f = FOCUS.anual.find(x => x.id === idF);
     const itens = [];
-    for (const ano of [2026, 2027]) {
-      itens.push({ rotulo: `Focus ${ano} (23/10/2026)`, valor: f.v[ano].hoje, cor: 'var(--c-base)' });
+    for (const ano of FOCUS.anos.slice(0, 2)) {
+      if (!f?.v[ano]) continue;
+      itens.push({ rotulo: `Focus ${ano} (${dataCompleta(FOCUS.data)})`, valor: f.v[ano].hoje, cor: 'var(--c-base)' });
       const r = IPEA.registros.find(x => x.chave === chave && x.ano === ano);
-      if (r) itens.push({ rotulo: `Ipea ${ano} (jun./2026)`, valor: r.valor, cor: 'var(--c-destaque)' });
+      if (r) itens.push({ rotulo: `Ipea ${ano} (Carta nº ${IPEA.numero})`, valor: r.valor, cor: 'var(--c-destaque)' });
     }
     return { nome, itens };
   });
   const serie = id => FOCUS.anos.map(a => [String(a), FOCUS.anual.find(x => x.id === id).v[a].hoje]);
   return h('div', { class: 'grade-2' },
     h('div', { class: 'cartao' }, h('h4', {}, 'Focus e Ipea lado a lado'),
-      h('p', { class: 'ajuda' }, 'As duas fontes têm datas diferentes: o Focus é de 23/10/2026 e a Carta do Ipea é do 2º trimestre de 2026. Diferenças entre elas ajudam a delimitar os cenários favorável e adverso.'),
+      h('p', { class: 'ajuda' }, `As duas fontes têm datas diferentes: o Focus é de ${dataCompleta(FOCUS.data)} e a Carta do Ipea é do ${IPEA.periodo}. Diferenças entre elas ajudam a delimitar os cenários favorável e adverso.`),
       barrasGrupos(blocos)),
-    h('div', { class: 'cartao' }, h('h4', {}, 'Trajetória esperada pelo mercado (Focus), 2026–2029'),
+    h('div', { class: 'cartao' }, h('h4', {}, `Trajetória esperada pelo mercado (Focus), ${FOCUS.anos[0]}–${FOCUS.anos.at(-1)}`),
       linhas([{ nome: 'Selic', cor: 'var(--c-primaria)', pontos: serie('selic') }, { nome: 'IPCA', cor: 'var(--c-adverso)', pontos: serie('ipca') }, { nome: 'PIB', cor: 'var(--c-favoravel)', pontos: serie('pib') }], FOCUS.anos.map(String)),
       h('div', { class: 'legenda' }, [['Selic (% a.a.)', 'var(--c-primaria)'], ['IPCA (%)', 'var(--c-adverso)'], ['PIB (%)', 'var(--c-favoravel)']].map(([t, c]) => h('span', {}, h('i', { style: `background:${c}` }), t)))));
 }
@@ -91,7 +93,7 @@ export function explorador({ aoUsar = null, filtro = null, origem = '' } = {}) {
       conteudo = [h('p', { class: 'ajuda' }, `${IPEA.titulo} — ${IPEA.periodo}. ${IPEA.nota}`), tabelaIpea(aoUsar, filtro)];
     } else if (ativa === 'ipea-args') {
       conteudo = [h('p', { class: 'ajuda' }, 'Guia de leitura: paráfrases dos argumentos centrais da Carta, com a página de origem. Use-o para localizar os trechos no original; não substitui a leitura.'),
-        h('div', { class: 'grade-2' }, IPEA.argumentos.map(a => h('div', { class: 'cartao arg' }, h('h4', {}, a.titulo), h('p', {}, a.texto), h('span', { class: 'pag' }, `Carta de Conjuntura nº 71, p. ${a.pagina}`))))];
+        h('div', { class: 'grade-2' }, IPEA.argumentos.map(a => h('div', { class: 'cartao arg' }, h('h4', {}, a.titulo), h('p', {}, a.texto), h('span', { class: 'pag' }, `${IPEA.curto}, p. ${a.pagina}`))))];
     } else conteudo = [comparar()];
     corpo.replaceChildren(...conteudo);
   };

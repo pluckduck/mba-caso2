@@ -149,7 +149,7 @@ function moldura(ctx, n, fontes) {
 }
 
 const FONTE_FOCUS = () => `Focus – Relatório de Mercado (BCB), ${FOCUS.dataTxt}`;
-const FONTE_IPEA = () => `Carta de Conjuntura nº 71 (Ipea), ${IPEA.periodo}`;
+const FONTE_IPEA = () => `${IPEA.curto} (Ipea), ${IPEA.periodo}`;
 
 // ---------- Slide 1: empresa ----------
 function slide1(ctx) {

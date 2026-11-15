@@ -5,6 +5,7 @@ const a = (h4, h1, hoje, comp, sem, resp, d5 = null, resp5 = null) => ({ h4, h1,
 
 export const FOCUS = {
   id: 'focus',
+  edicao: 'focus-2026-10-23',
   titulo: 'Focus — Relatório de Mercado',
   instituicao: 'Banco Central do Brasil',
   data: '2026-10-23',
@@ -73,13 +74,17 @@ const ANA = 'Estimativa ou análise da fonte';
 
 export const IPEA = {
   id: 'ipea',
+  edicao: 'ipea-cc71',
+  numero: 71,
+  curto: 'Carta de Conjuntura nº 71',
+  curtoNota: 'Carta de Conjuntura nº 71, Nota de Conjuntura 24',
   titulo: 'Carta de Conjuntura nº 71 — Nota de Conjuntura 24 — Visão geral da conjuntura',
   instituicao: 'Instituto de Pesquisa Econômica Aplicada (Ipea)',
   periodo: '2º trimestre de 2026',
-  publicacao: 'junho de 2026',
+  publicacao: '8 de julho de 2026',
   url: 'https://www.ipea.gov.br/cartadeconjuntura/',
   citacao: 'SANTOS, Claudio Hamilton Matos dos; AMITRANO, Cláudio Roberto; ARAUJO, Mônica Mora y. Visão geral da conjuntura. Carta de Conjuntura, Brasília: Ipea, n. 71, Nota de Conjuntura 24, 2º trim. 2026.',
-  nota: 'A capa do arquivo indica divulgação em 08/06/2026, mas o texto menciona fatos de até o fim de junho de 2026 (Copom de 16–17/06 e Focus de 26/06). Ao citar, use "2º trimestre de 2026" como período de referência.',
+  nota: 'A capa do arquivo de apoio indica divulgação em 08/06/2026, mas o site do Ipea registra a publicação em 08/07/2026 e o texto menciona fatos de até o fim de junho de 2026 (Copom de 16–17/06 e Focus de 26/06). Ao citar, use "2º trimestre de 2026" como período de referência.',
   temas: ['Atividade', 'Projeções PIB', 'Preços', 'Juros e câmbio', 'Trabalho e renda', 'Crédito e famílias', 'Fiscal', 'Setor externo'],
   registros: [
     // Atividade (observado)
@@ -156,6 +161,15 @@ export const IPEA = {
     { titulo: 'Política fiscal sem mudança em 2026', texto: 'O Ipea não antevê alteração da política fiscal no ano; a dívida segue em alta e o tema deve entrar no debate eleitoral.', pagina: 6 },
   ],
 };
+
+// Edições embutidas no aplicativo: são a reserva para o modo local ou para falha do banco de dados.
+// No uso normal, as edições (inclusive estas) vêm das tabelas relatorios, focus_dados e ipea_dados.
+export const EDICOES_EMBUTIDAS = [
+  { id: FOCUS.edicao, fonte: 'focus', data_referencia: FOCUS.data, data_divulgacao: '2026-10-26', rotulo: FOCUS.dataTxt, situacao: 'carregado',
+    metadados: { titulo: FOCUS.titulo, instituicao: FOCUS.instituicao, data: FOCUS.data, dataTxt: FOCUS.dataTxt, url: FOCUS.url, citacao: FOCUS.citacao, nota: FOCUS.nota, anos: FOCUS.anos, periodosMensais: FOCUS.periodosMensais } },
+  { id: IPEA.edicao, fonte: 'ipea', data_referencia: '2026-07-08', data_divulgacao: '2026-07-08', rotulo: `nº ${IPEA.numero}, ${IPEA.periodo}`, situacao: 'carregado',
+    metadados: { titulo: IPEA.titulo, instituicao: IPEA.instituicao, periodo: IPEA.periodo, publicacao: IPEA.publicacao, url: IPEA.url, citacao: IPEA.citacao, nota: IPEA.nota, temas: IPEA.temas, argumentos: IPEA.argumentos, numero: IPEA.numero, curto: IPEA.curto, curtoNota: IPEA.curtoNota } },
+];
 
 // Catálogo de variáveis: liga cada variável aos indicadores publicados e a um roteiro de raciocínio.
 // Os "canais" são roteiros didáticos genéricos (não são conclusões das fontes): devem ser adaptados à empresa.
@@ -325,14 +339,14 @@ export function referenciasPublicadas(varId) {
   const out = [];
   if (v.focus) {
     const linha = FOCUS.anual.find(x => x.id === v.focus);
-    for (const ano of [2026, 2027]) {
+    for (const ano of FOCUS.anos.slice(0, 2)) {
       const c = linha?.v[ano];
       if (c) out.push({ valor: c.hoje, rotulo: `Focus ${ano}`, fonte: `Focus (BCB), ${FOCUS.dataTxt}`, periodo: `fim de ${ano}`, origem: 'focus' });
     }
   }
   if (v.ipea) {
     for (const r of IPEA.registros.filter(x => x.chave === v.ipea)) {
-      out.push({ valor: r.valor, rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `Carta de Conjuntura nº 71 (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
+      out.push({ valor: r.valor, rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `${IPEA.curto} (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
     }
   }
   return out;

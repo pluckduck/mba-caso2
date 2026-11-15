@@ -131,17 +131,15 @@ export async function salvarCaso(dados, tema, prog = null) {
 }
 
 // Dados de referência (Focus e Ipea) gravados no Supabase. Retorna null se indisponíveis.
-export async function carregarReferencias() {
+// Edições dos relatórios de referência (tabelas relatorios, focus_dados e ipea_dados).
+export async function listarRelatorios() {
   if (!remoto) return null;
-  try {
-    const [fontes, focus, ipea] = await Promise.all([
-      chamar('/rest/v1/fontes_referencia?select=*'),
-      chamar('/rest/v1/focus_expectativas?select=*&order=ordem'),
-      chamar('/rest/v1/ipea_indicadores?select=*&order=ordem'),
-    ]);
-    if (!focus?.length || !ipea?.length) return null;
-    return { fontes, focus, ipea };
-  } catch { return null; }
+  try { return await chamar('/rest/v1/relatorios?select=*&order=data_referencia.desc'); } catch { return null; }
+}
+export async function dadosRelatorio(fonte, id) {
+  if (!remoto) return null;
+  const tabela = fonte === 'focus' ? 'focus_dados' : 'ipea_dados';
+  return chamar(`/rest/v1/${tabela}?select=*&relatorio_id=eq.${encodeURIComponent(id)}&order=ordem`);
 }
 
 // ---------- Administração ----------

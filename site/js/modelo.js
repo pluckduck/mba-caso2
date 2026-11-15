@@ -28,7 +28,7 @@ export const ETAPAS = [
 let seq = 0;
 export const uid = () => `${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-export const novaVariavel = () => ({ uid: uid(), tipo: '', nome: '', dado: '', valorNum: null, unidade: '', natureza: '', fonte: '', publicacao: '', periodo: '', tendencia: '', implicacao: '', sensibilidade: 2 });
+export const novaVariavel = () => ({ uid: uid(), tipo: '', nome: '', dado: '', valorNum: null, unidade: '', natureza: '', fonte: '', publicacao: '', periodo: '', tendencia: '', implicacao: '', sensibilidade: 2, origem: null });
 export const novaDecisao = () => ({ uid: uid(), acao: '', evidencia: '', risco: '', contribuicao: '' });
 const novoCenario = () => ({ premissas: '', publicadas: '', hipoteses: '', traj: {} });
 const novoImpacto = () => ({ clientes: '', demanda: '', ciclo: '', precos: '', resultado: '', cadeias: {} });
@@ -40,6 +40,8 @@ export function casoVazio() {
     diag: { setor: '', clientes: '', mercado: '', exposicao: '' },
     variaveis: [novaVariavel(), novaVariavel(), novaVariavel()],
     consultas: { focusData: '', focusTexto: '', ipeaTitulo: '', ipeaTexto: '' },
+    // Edição de cada relatório usada pelo caso ('' = ainda não definida) e a edição mais recente que o autor preferiu não adotar.
+    edicoes: { focus: '', ipea: '', mantida: {} },
     cenarios: { base: novoCenario(), favoravel: novoCenario(), adverso: novoCenario() },
     impactos: { base: novoImpacto(), favoravel: novoImpacto(), adverso: novoImpacto() },
     simulador: { receita: '', sens: {} },
@@ -54,7 +56,8 @@ export function normalizar(c) {
   const v = casoVazio();
   if (!c || typeof c !== 'object') return v;
   const out = { ...v, ...c };
-  for (const k of ['ident', 'diag', 'consultas', 'simulador', 'slides']) out[k] = { ...v[k], ...(c[k] || {}) };
+  for (const k of ['ident', 'diag', 'consultas', 'simulador', 'slides', 'edicoes']) out[k] = { ...v[k], ...(c[k] || {}) };
+  out.edicoes.mantida = { ...(c.edicoes?.mantida || {}) };
   out.simulador.sens = { ...(c.simulador?.sens || {}) };
   out.slides.textos = { ...(c.slides?.textos || {}) };
   out.variaveis = (Array.isArray(c.variaveis) && c.variaveis.length ? c.variaveis : v.variaveis).map(x => ({ ...novaVariavel(), ...x }));
@@ -212,6 +215,7 @@ export function evidenciaFocus(linha, periodo, tipoHorizonte) {
     publicacao: FOCUS.dataTxt,
     periodo: perTxt,
     tendencia: `Mediana em ${fmt(c.hoje, linha.casas)} (hoje), ante ${fmt(c.h1, linha.casas)} há uma semana e ${fmt(c.h4, linha.casas)} há quatro semanas; ${comp} há ${c.sem} semana${c.sem > 1 ? 's' : ''} (${c.resp} respondentes).`,
+    origem: { fonte: 'focus', edicao: FOCUS.edicao, tipo: tipoHorizonte, indicador: linha.id, periodo: String(periodo) },
   };
 }
 
@@ -225,9 +229,58 @@ export function evidenciaIpea(r) {
     valorNum: r.valor,
     unidade: cat?.unidade || r.unidade,
     natureza: r.natureza,
-    fonte: `Carta de Conjuntura nº 71, Nota de Conjuntura 24 (Ipea), p. ${r.pagina}`,
+    fonte: `${IPEA.curtoNota} (Ipea), p. ${r.pagina}`,
     publicacao: IPEA.publicacao,
     periodo: r.periodo,
     tendencia: `${r.indicador}${r.nota ? ': ' + r.nota : '.'}`,
+    origem: { fonte: 'ipea', edicao: IPEA.edicao, registro: r.id, chave: r.chave || null, ano: r.ano || null },
   };
 }
+
+// Ano que concentra o horizonte do caso (o que tem mais meses entre o início e o fim; em empate, o mais tardio).
+export function anoDoHorizonte(ident) {
+  const [a1, m1] = (ident?.inicio || '').split('-').map(Number);
+  const [a2, m2] = (ident?.fim || '').split('-').map(Number);
+  if (!a1 || !a2 || a2 < a1) return a2 || a1 || null;
+  let melhor = a1, maior = -1;
+  for (let a = a1; a <= a2; a++) {
+    const meses = (a === a2 ? m2 : 12) - (a === a1 ? m1 : 1) + 1;
+    if (meses >= maior) { maior = meses; melhor = a; }
+  }
+  return melhor;
+}
+
+// Dado sugerido para uma variável do catálogo, na edição em uso: Focus primeiro (projeção para o fim do ano
+// que concentra o horizonte); a Carta do Ipea quando o Focus não cobre a variável. Fonte externa: sem sugestão.
+export function sugestaoEvidencia(cat, ident) {
+  if (!cat || cat.externa || cat.id === 'outra') return null;
+  const ano = anoDoHorizonte(ident) || FOCUS.anos[0];
+  if (cat.focus) {
+    const linha = FOCUS.anual.find(x => x.id === cat.focus);
+    const anos = [ano, ...FOCUS.anos].filter(a => linha?.v[a]);
+    if (anos.length) return evidenciaFocus(linha, anos[0], 'anual');
+  }
+  if (cat.ipea) {
+    const rs = IPEA.registros.filter(r => r.chave === cat.ipea);
+    const r = rs.find(x => x.ano === ano) || rs.filter(x => x.ano).sort((a, b) => Math.abs(a.ano - ano) - Math.abs(b.ano - ano))[0] || rs[0];
+    if (r) return evidenciaIpea(r);
+  }
+  return null;
+}
+
+// Todas as opções de dado para uma variável do catálogo, na edição em uso (janela "Escolher outro dado").
+export function opcoesEvidencia(cat) {
+  const out = { focus: [], ipea: [] };
+  if (!cat) return out;
+  if (cat.focus) {
+    const anual = FOCUS.anual.find(x => x.id === cat.focus), mensal = FOCUS.mensal.find(x => x.id === cat.focus);
+    for (const a of FOCUS.anos) if (anual?.v[a]) out.focus.push({ linha: anual, periodo: a, tipo: 'anual', ev: evidenciaFocus(anual, a, 'anual'), cel: anual.v[a] });
+    for (const p of FOCUS.periodosMensais) if (mensal?.v[p]) out.focus.push({ linha: mensal, periodo: p, tipo: 'mensal', ev: evidenciaFocus(mensal, p, 'mensal'), cel: mensal.v[p] });
+  }
+  if (cat.ipea) for (const r of IPEA.registros.filter(x => x.chave === cat.ipea)) out.ipea.push({ registro: r, ev: evidenciaIpea(r) });
+  return out;
+}
+
+// A evidência registrada na variável ainda corresponde a este registro de origem?
+export const mesmaOrigem = (o, ev) => Boolean(o && ev?.origem && o.fonte === ev.origem.fonte && o.edicao === ev.origem.edicao
+  && (o.fonte === 'focus' ? o.tipo === ev.origem.tipo && o.indicador === ev.origem.indicador && String(o.periodo) === String(ev.origem.periodo) : o.registro === ev.origem.registro));

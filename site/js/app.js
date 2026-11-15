@@ -4,9 +4,10 @@ import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } 
 import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
-  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid } from './modelo.js';
+  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea } from './modelo.js';
 import { construir, exportarPptx, notasApresentador, renderHTML, TITULOS } from './slides.js';
 import { explorador } from './explorador.js';
+import * as ed from './edicoes.js';
 
 const estado = { caso: casoVazio(), tema: { id: 'executivo' }, salvo: 'ok', origemDados: 'arquivo', admin: false };
 const raiz = document.getElementById('app');
@@ -80,21 +81,79 @@ function vivo(fn, classe = '') {
 }
 window.addEventListener('beforeunload', e => { if (estado.salvo === 'pendente') { salvarAgora(); e.preventDefault(); e.returnValue = ''; } });
 
-// ---------- Dados de referência vindos do Supabase ----------
-function hidratarReferencias(refs) {
-  if (!refs) return;
-  const cel = r => ({ h4: r.ha_4_semanas, h1: r.ha_1_semana, hoje: r.hoje, comp: r.comportamento, sem: r.semanas, resp: r.respondentes, d5: r.cinco_dias, resp5: r.respondentes_5d });
-  for (const tipo of ['anual', 'mensal']) {
-    const mapa = new Map();
-    for (const r of refs.focus.filter(x => x.tipo === tipo)) {
-      if (!mapa.has(r.indicador_id)) mapa.set(r.indicador_id, { id: r.indicador_id, indicador: r.indicador, unidade: r.unidade, casas: 2, v: {} });
-      mapa.get(r.indicador_id).v[r.periodo] = cel(r);
+// ---------- Edições dos relatórios em uso pelo caso ----------
+const EDICAO_LEGADA = { focus: 'focus-2026-10-23', ipea: 'ipea-cc71' };   // as únicas que existiam antes de haver escolha de edição
+const casoTemEvidencia = c => c.variaveis.some(v => v.dado || v.fonte || v.publicacao) || Boolean(c.consultas.focusData || c.consultas.ipeaTitulo);
+// Define a edição de cada relatório para o caso aberto e carrega os dados correspondentes.
+// Caso novo (ou ainda sem evidências): edição mais recente. Caso iniciado antes: fica na edição em que começou.
+async function prepararEdicoes(casoJaExistia) {
+  await ed.carregarLista();
+  const c = estado.caso;
+  for (const fonte of ['focus', 'ipea']) {
+    const validas = ed.carregadas(fonte);
+    let id = c.edicoes[fonte];
+    if (!validas.some(e => e.id === id)) {
+      const legada = casoJaExistia && casoTemEvidencia(c) && validas.find(e => e.id === EDICAO_LEGADA[fonte]);
+      id = (legada || validas[0])?.id || '';
+      c.edicoes[fonte] = id;
     }
-    if (mapa.size) FOCUS[tipo] = [...mapa.values()];
+    try { await ed.usarEdicao(fonte, id); }
+    catch (e) { aviso(`Não foi possível carregar os dados ${fonte === 'focus' ? 'do Focus' : 'da Carta do Ipea'}: ${e.message}`, 'erro'); }
   }
-  IPEA.registros = refs.ipea.map(r => ({ id: r.id, tema: r.tema, indicador: r.indicador, valor: r.valor, unidade: r.unidade, periodo: r.periodo, natureza: r.natureza, pagina: r.pagina, nota: r.nota || '', chave: r.chave || undefined, ano: r.ano || undefined }));
-  for (const f of refs.fontes || []) Object.assign(f.id === 'focus' ? FOCUS : IPEA, f.metadados || {});
-  estado.origemDados = 'supabase';
+  estado.origemDados = ed.estadoEdicoes.origem === 'supabase' ? 'supabase' : 'arquivo';
+  inferirOrigens(c);
+}
+// Evidências registradas antes de o aplicativo guardar a origem: reconhece as que vieram do Focus ou da Carta pela fonte e pela data.
+function inferirOrigens(c) {
+  for (const v of c.variaveis) {
+    if (v.origem || !v.dado) continue;
+    const cat = catalogo(v.tipo);
+    if (!cat) continue;
+    const m = /^fim de (\d{4})$/.exec(v.periodo || '');
+    if (cat.focus && m && v.publicacao === '23 de outubro de 2026' && /^Focus/.test(v.fonte || '')) v.origem = { fonte: 'focus', edicao: EDICAO_LEGADA.focus, tipo: 'anual', indicador: cat.focus, periodo: m[1], auto: false };
+    else if (cat.ipea && /^Carta de Conjuntura nº 71/.test(v.fonte || '')) v.origem = { fonte: 'ipea', edicao: EDICAO_LEGADA.ipea, registro: null, chave: cat.ipea, ano: /^\d{4}$/.test(v.periodo || '') ? Number(v.periodo) : null, auto: false };
+  }
+}
+let trocandoEdicao = false;
+async function trocarEdicao(fonte, id) {
+  const c = estado.caso;
+  if (trocandoEdicao || !id || id === c.edicoes[fonte]) return;
+  trocandoEdicao = true;
+  try {
+    const nova = await ed.usarEdicao(fonte, id);
+    c.edicoes[fonte] = id;
+    // Quem escolhe de propósito uma edição anterior não precisa do aviso de edição nova.
+    const recente = ed.maisRecente(fonte);
+    if (recente && recente.id !== id) c.edicoes.mantida[fonte] = recente.id; else delete c.edicoes.mantida[fonte];
+    mudou(); aviso(`O caso passa a usar ${fonte === 'focus' ? 'o Focus de' : 'a Carta'} ${nova.rotulo}.`);
+  } catch (e) { aviso(`Não foi possível trocar a edição: ${e.message}`, 'erro'); }
+  trocandoEdicao = false; redesenhar();
+}
+function cartaoEdicoes() {
+  const c = estado.caso;
+  const seletor = (fonte, rotulo) => {
+    const lista = ed.carregadas(fonte);
+    const sel = h('select', { 'aria-label': rotulo, onchange: e => trocarEdicao(fonte, e.target.value) }, lista.map((e, i) => h('option', { value: e.id }, `${e.rotulo}${i === 0 ? ' (mais recente)' : ''}`)));
+    sel.value = c.edicoes[fonte];
+    return h('label', { class: 'campo' }, rotulo, sel);
+  };
+  const avisos = ['focus', 'ipea'].map(fonte => {
+    const recente = ed.maisRecente(fonte), atual = ed.edicao(c.edicoes[fonte]);
+    if (!recente || !atual || recente.data_referencia <= atual.data_referencia || c.edicoes.mantida[fonte] === recente.id) return null;
+    const f = fonte === 'focus';
+    return h('div', { class: 'aviso-edicao' },
+      h('div', { class: 'caixa-titulo' }, h('strong', {}, f ? 'Há um Relatório Focus mais recente' : 'Há uma Carta de Conjuntura mais recente'), h('span', { class: 'selo pendente' }, recente.rotulo)),
+      h('p', {}, `Este caso usa ${f ? 'o Focus de' : 'a Carta'} ${atual.rotulo}, e nada muda sozinho. Você decide se troca: os dados que já registrou só mudam se você confirmar, variável por variável.`),
+      h('div', { class: 'acoes' },
+        botao(`Usar ${f ? 'o Focus de' : 'a Carta'} ${recente.rotulo}`, () => trocarEdicao(fonte, recente.id), 'primario'),
+        botao(`Manter ${f ? 'o de' : 'a Carta'} ${atual.rotulo}`, () => { c.edicoes.mantida[fonte] = recente.id; mudou(); redesenhar(); })));
+  });
+  const naMaisRecente = ['focus', 'ipea'].every(f => ed.maisRecente(f)?.id === c.edicoes[f]);
+  return h('section', { class: 'cartao' }, h('h2', {}, 'Relatórios de referência deste caso'),
+    h('p', { class: 'ajuda' }, 'O caso usa uma edição de cada relatório. Ela define os dados sugeridos nesta etapa, as referências publicadas da etapa 3 e a citação no rodapé dos slides.'),
+    avisos,
+    h('div', { class: 'grade-2' }, seletor('focus', 'Relatório Focus (Banco Central)'), seletor('ipea', 'Carta de Conjuntura (Ipea)')),
+    naMaisRecente ? h('p', { class: 'nota-edicao' }, h('span', { class: 'selo obs' }, 'mais recente'), 'O caso usa a edição mais recente de cada relatório.') : null);
 }
 
 // ---------- Navegação ----------
@@ -236,6 +295,7 @@ function alternarVariavel(catId) {
     let alvo = c.variaveis.find(v => !v.nome && !v.tipo);
     if (!alvo) { alvo = novaVariavel(); c.variaveis.push(alvo); }
     Object.assign(alvo, { tipo: cat.id, nome: catId === 'outra' ? '' : cat.nome, unidade: cat.unidade });
+    autoPreencher(alvo, cat);
   }
   mudou(); redesenhar();
 }
@@ -300,15 +360,96 @@ function etapa1() {
 }
 
 // ---------- Etapa 2 ----------
-function aplicarEvidencia(v, ev) {
+const temEvidenciaVar = v => ['dado', 'fonte', 'publicacao', 'periodo', 'tendencia'].some(k => String(v[k] || '').trim());
+// Registra na variável um dado do Focus ou da Carta, guardando de onde veio (edição, série e período).
+// O texto de tendência escrito pelo autor é preservado; só o texto sugerido pelo aplicativo é substituído.
+function aplicarEvidencia(v, ev, { auto = false } = {}) {
   const manter = v.nome ? { tipo: v.tipo, nome: v.nome, unidade: v.unidade || ev.unidade } : {};
-  Object.assign(v, ev, manter);
+  const tendAutor = v.origem?.tend !== undefined && String(v.tendencia || '').trim() && v.tendencia !== v.origem.tend ? v.tendencia : null;
+  const { origem, ...campos } = ev;
+  Object.assign(v, campos, manter);
+  if (tendAutor) v.tendencia = tendAutor;
+  v.origem = origem ? { ...origem, auto, tend: ev.tendencia } : null;
   mudou();
+  return Boolean(tendAutor);
+}
+// Preenche a variável com o dado sugerido (edição em uso), se ela ainda não tiver evidência registrada.
+function autoPreencher(v, cat) {
+  if (temEvidenciaVar(v)) return false;
+  const ev = sugestaoEvidencia(cat, estado.caso.ident);
+  if (!ev) return false;
+  aplicarEvidencia(v, ev, { auto: true });
+  return true;
+}
+// O mesmo dado (série e período) na edição que o caso usa agora; null se não existir.
+function equivalenteAtual(o) {
+  if (o.fonte === 'focus') {
+    const linha = (o.tipo === 'mensal' ? FOCUS.mensal : FOCUS.anual).find(x => x.id === o.indicador);
+    return linha?.v[o.periodo] ? evidenciaFocus(linha, o.periodo, o.tipo) : null;
+  }
+  const r = IPEA.registros.find(x => x.id === o.registro) || (o.chave ? IPEA.registros.find(x => x.chave === o.chave && (x.ano || null) === (o.ano || null)) : null);
+  return r ? evidenciaIpea(r) : null;
+}
+const nomeEdicao = (fonte, e, reserva = '') => (fonte === 'focus' ? `Focus (BCB), ${e?.rotulo || reserva}` : `Carta de Conjuntura ${e?.rotulo || reserva} (Ipea)`);
+// Faixa logo abaixo do título da variável: de onde veio o dado, sugestão disponível ou dado de edição anterior.
+function faixaOrigem(v, cat) {
+  const area = h('div', { class: 'faixa-area' });
+  const desenhar = () => {
+    const o = v.origem, c = estado.caso;
+    if (!o) {
+      const sug = cat && !temEvidenciaVar(v) ? sugestaoEvidencia(cat, c.ident) : null;
+      return area.replaceChildren(...(sug ? [h('div', { class: 'faixa-origem sugestao' },
+        h('span', {}, h('span', { class: 'selo contagem' }, 'Sugestão'), h('strong', {}, sug.dado), ` · ${nomeEdicao(sug.origem.fonte, ed.edicao(sug.origem.edicao))} · ${sug.periodo}`),
+        botao('Usar esta sugestão', () => { aplicarEvidencia(v, sug, { auto: true }); redesenhar(); }, 'primario pequeno'))] : []));
+    }
+    const atualId = c.edicoes[o.fonte], f = o.fonte === 'focus';
+    const deOrigem = ed.edicao(o.edicao), atual = ed.edicao(atualId);
+    if (!atualId || o.edicao === atualId) return area.replaceChildren(h('div', { class: 'faixa-origem ok' },
+      h('span', {}, h('span', { class: 'selo obs' }, o.auto ? 'Preenchido automaticamente' : 'Dado do relatório'), h('strong', {}, nomeEdicao(o.fonte, deOrigem, v.publicacao)),
+        ` · ${v.periodo}${o.auto && f ? ', ano que concentra o horizonte do caso' : ''}`)));
+    const novo = o.mantida === atualId ? null : equivalenteAtual(o);
+    if (!novo) return area.replaceChildren(h('div', { class: 'faixa-origem' },
+      h('span', {}, h('span', { class: 'selo' }, 'Edição anterior'), h('strong', {}, nomeEdicao(o.fonte, deOrigem, v.publicacao)), ` · ${v.periodo}${o.mantida === atualId ? ' · mantido por você' : ' · sem equivalente na edição em uso'}`)));
+    const igual = novo.dado === v.dado;
+    area.replaceChildren(h('div', { class: 'faixa-origem antiga' },
+      h('span', {}, `Este dado veio ${f ? 'do Focus de' : 'da Carta'} `, h('strong', {}, deOrigem?.rotulo || v.publicacao), ` (${v.dado}, ${v.periodo}). ${f ? 'No Focus de' : 'Na Carta'} ${atual?.rotulo || ''}, ${igual ? 'o valor para o mesmo período continua em ' : `${f ? 'a mediana' : 'o valor'} para o mesmo período é `}`, h('strong', {}, novo.dado), '.'),
+      h('div', { class: 'acoes' },
+        botao('Atualizar este dado', () => { const manteve = aplicarEvidencia(v, novo, { auto: o.auto }); redesenhar(); aviso(manteve ? 'Dado atualizado. O texto de tendência é seu e foi mantido: revise-o.' : 'Dado atualizado para a edição em uso.'); }, 'primario pequeno'),
+        botao('Manter', () => { v.origem.mantida = atualId; mudou(); desenhar(); }, 'pequeno'))));
+  };
+  desenhar();
+  // Edição manual do dado, da fonte, da data ou do período: o vínculo com o relatório deixa de valer.
+  area.esquecer = () => { v.origem = null; area.replaceChildren(); };
+  return area;
 }
 function abrirBusca(v) {
   const cat = catalogo(v.tipo);
   const filtro = cat?.focus ? { aba: 'focus-anual' } : (cat?.ipea ? { aba: 'ipea', chave: cat.ipea } : null);
   const fechar = modal(`Buscar evidência para: ${v.nome || 'nova variável'}`, explorador({ filtro, aoUsar: ev => { aplicarEvidencia(v, ev); fechar(); redesenhar(); aviso('Evidência registrada com fonte, data e período.'); } }), { largo: true });
+}
+// Janela "Escolher outro dado": só as opções desta variável, nas edições que o caso está usando.
+function abrirEscolha(v) {
+  const cat = catalogo(v.tipo), ops = opcoesEvidencia(cat);
+  if (!ops.focus.length && !ops.ipea.length) return abrirBusca(v);
+  const c = estado.caso, sug = sugestaoEvidencia(cat, c.ident);
+  let fechar = () => {};
+  const usar = ev => { const manteve = aplicarEvidencia(v, ev); fechar(); redesenhar(); aviso(manteve ? 'Dado trocado. O texto de tendência é seu e foi mantido: revise-o.' : 'Dado trocado, com fonte, data e período.'); };
+  const opcao = (periodo, ev, obs, nota) => {
+    const emUso = mesmaOrigem(v.origem, ev) && v.dado === ev.dado;
+    return h('button', { class: `opcao-dado ${emUso ? 'ativo' : ''}`, 'aria-pressed': String(emUso), onclick: () => (emUso ? fechar() : usar(ev)) },
+      h('span', { class: 'opcao-esq' }, h('span', { class: 'opcao-per' }, periodo), h('strong', {}, ev.dado), emUso ? h('span', { class: 'selo contagem' }, 'em uso') : null,
+        obs ? h('span', { class: 'opcao-obs' }, obs) : null, nota ? h('span', { class: 'opcao-nota' }, nota) : null),
+      emUso ? null : h('span', { class: 'opcao-acao' }, 'Usar este dado'));
+  };
+  const grupo = (titulo, sub, linhas) => (linhas.length ? h('div', { class: 'grupo-opcoes' }, h('div', { class: 'grupo-opcoes-cab' }, h('h4', {}, titulo), h('span', {}, sub)), linhas) : null);
+  const obsFocus = x => [mesmaOrigem(sug?.origem, x.ev) ? 'sugerido para o horizonte do caso' : '', x.tipo === 'mensal' ? 'expectativa mensal' : '',
+    x.cel.comp !== 'estavel' ? `em ${x.cel.comp} há ${x.cel.sem} semana${x.cel.sem > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+  const corpo = h('div', { class: 'escolha-dado' },
+    h('p', { class: 'ajuda' }, 'Só as opções desta variável, nas edições que o caso está usando.'),
+    grupo('Relatório Focus (Banco Central)', `edição de ${ed.edicao(c.edicoes.focus)?.rotulo || FOCUS.dataTxt} · mediana das expectativas`, ops.focus.map(x => opcao(x.ev.periodo, x.ev, obsFocus(x)))),
+    grupo('Carta de Conjuntura (Ipea)', `${ed.edicao(c.edicoes.ipea)?.rotulo || IPEA.periodo}`, ops.ipea.map(x => opcao(`${x.registro.indicador} · ${x.registro.periodo}`, x.ev, `${x.registro.natureza.toLowerCase()}, p. ${x.registro.pagina}`, x.registro.nota))),
+    h('div', { class: 'escolha-pe' }, botao('Procurar em todas as séries do Focus e do Ipea', () => { fechar(); abrirBusca(v); }, 'contorno'), botao('Cancelar', () => fechar())));
+  fechar = modal(`Escolher outro dado: ${v.nome}`, corpo, { largo: true });
 }
 function roteiro(v) {
   const cat = catalogo(v.tipo);
@@ -321,25 +462,29 @@ function cartaoVariavel(v, i) {
   const c = estado.caso;
   const cat = catalogo(v.tipo);
   const ext = Boolean(cat?.externa);
+  const temSerie = Boolean(cat && (cat.focus || cat.ipea));
+  const faixa = ext ? null : faixaOrigem(v, cat);
+  const manual = () => { faixa?.esquecer(); mudou(); };
   return h('section', { class: `cartao variavel ${ext ? 'externa' : ''}` },
     h('div', { class: 'cab-linha' }, h('h3', {}, `Variável ${i + 1}`, v.nome ? ` — ${v.nome}` : '', ext ? selo('Fonte externa', 'externa') : null),
-      h('div', { class: 'acoes' }, ext ? null : botao('Buscar no Focus ou no Ipea', () => abrirBusca(v), 'primario pequeno'),
+      h('div', { class: 'acoes' }, ext ? null : botao(temSerie ? 'Escolher outro dado' : 'Buscar no Focus ou no Ipea', () => abrirEscolha(v), temSerie && v.dado ? 'contorno pequeno' : 'primario pequeno'),
         botao('Remover', () => { if (!temDadosVar(v) || confirm('Remover esta variável e suas evidências?')) { removerVariavel(v.uid); mudou(); redesenhar(); } }, 'fantasma pequeno'))),
     ext ? h('div', { class: 'aviso-externa' },
       h('strong', {}, 'Esta variável não consta do Focus nem da Carta de Conjuntura'),
       h('p', {}, 'Preencha os campos abaixo com o dado encontrado na fonte indicada, informando a data de publicação e o período de referência.'),
       h('div', { class: 'onde-buscar' }, h('span', {}, 'Onde buscar:'), cat.fontes.map(f => h('a', { href: f.url, target: '_blank', rel: 'noopener' }, `${f.nome} ↗`)))) : null,
+    faixa,
     h('div', { class: 'grade-3' },
-      C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...GRUPOS.flatMap(g => variaveisDoGrupo(g.id).map(x => [x.id, `${g.nome} — ${x.nome}${x.externa ? ' (fonte externa)' : ''}`])), ['outra', 'Outra variável']], aoMudar: val => { const cat = catalogo(val); if (cat && val !== 'outra') { v.nome = cat.nome; v.unidade = cat.unidade; } mudou(); redesenhar(); } }),
+      C({ rotulo: 'Tipo', obj: v, chave: 'tipo', tipo: 'select', opcoes: [['', 'Selecione…'], ...GRUPOS.flatMap(g => variaveisDoGrupo(g.id).map(x => [x.id, `${g.nome} — ${x.nome}${x.externa ? ' (fonte externa)' : ''}`])), ['outra', 'Outra variável']], aoMudar: val => { const cat = catalogo(val); if (cat && val !== 'outra') { v.nome = cat.nome; v.unidade = cat.unidade; autoPreencher(v, cat); } mudou(); redesenhar(); } }),
       C({ rotulo: 'Nome da variável', obj: v, chave: 'nome', tipo: 'text', placeholder: 'Ex.: Taxa de juros (Selic)' }),
       C({ rotulo: 'Unidade', obj: v, chave: 'unidade', tipo: 'text', placeholder: '%, % a.a., R$/US$…' })),
     h('div', { class: 'grade-2' },
-      C({ rotulo: 'Dado ou projeção / unidade', obj: v, chave: 'dado', tipo: 'text', placeholder: 'Ex.: 13,25 % a.a.', aoMudar: val => { v.valorNum = numSimples(String(val).match(/-?\d+(?:[.,]\d+)?/)?.[0]); mudou(); } }),
+      C({ rotulo: 'Dado ou projeção / unidade', obj: v, chave: 'dado', tipo: 'text', placeholder: 'Ex.: 13,25 % a.a.', aoMudar: val => { v.valorNum = numSimples(String(val).match(/-?\d+(?:[.,]\d+)?/)?.[0]); manual(); } }),
       C({ rotulo: 'Natureza da informação', obj: v, chave: 'natureza', tipo: 'select', opcoes: [['', 'Selecione…'], ...NATUREZAS] })),
     h('div', { class: 'grade-3' },
-      C({ rotulo: 'Fonte / título', obj: v, chave: 'fonte', tipo: 'text', placeholder: 'Publicação e instituição' }),
-      C({ rotulo: 'Data de publicação', obj: v, chave: 'publicacao', tipo: 'text', placeholder: 'Ex.: 23 de outubro de 2026' }),
-      C({ rotulo: 'Período de referência', obj: v, chave: 'periodo', tipo: 'text', placeholder: 'Ex.: fim de 2027' })),
+      C({ rotulo: 'Fonte / título', obj: v, chave: 'fonte', tipo: 'text', placeholder: 'Publicação e instituição', aoMudar: manual }),
+      C({ rotulo: 'Data de publicação', obj: v, chave: 'publicacao', tipo: 'text', placeholder: 'Ex.: 23 de outubro de 2026', aoMudar: manual }),
+      C({ rotulo: 'Período de referência', obj: v, chave: 'periodo', tipo: 'text', placeholder: 'Ex.: fim de 2027', aoMudar: manual })),
     C({ rotulo: 'Tendência e evidência de sustentação', ajuda: 'O que o dado indica (alta, queda, estabilidade) e que evidência sustenta essa leitura.', obj: v, chave: 'tendencia' }),
     C({ rotulo: 'Implicação para o mercado da empresa', ajuda: 'Como essa variável afeta os clientes e o desempenho comercial da empresa analisada.', obj: v, chave: 'implicacao' }),
     roteiro(v));
@@ -348,6 +493,7 @@ function etapa2() {
   const c = estado.caso;
   return h('div', { class: 'vista' }, cabecalhoEtapa(2),
     h('p', { class: 'lead' }, 'Para cada variável, registre o dado ou a projeção encontrada, a tendência, a relação com o mercado da empresa, a fonte, a data de publicação e o período de referência. Diferencie dados observados, projeções publicadas e hipóteses.'),
+    cartaoEdicoes(),
     c.variaveis.map(cartaoVariavel),
     h('div', { class: 'acoes' }, botao('+ Adicionar variável', () => { c.variaveis.push(novaVariavel()); mudou(); redesenhar(); }, 'fantasma')),
     h('section', { class: 'cartao' }, h('h2', {}, 'Consultas obrigatórias'),
@@ -357,7 +503,7 @@ function etapa2() {
           C({ rotulo: 'Data / período', obj: c.consultas, chave: 'focusData', tipo: 'text', placeholder: 'Data do relatório consultado' }),
           C({ rotulo: 'Expectativas relevantes e contribuição para a análise', obj: c.consultas, chave: 'focusTexto', linhas: 5 })),
         h('div', {},
-          h('div', { class: 'cab-linha' }, h('h3', {}, 'Carta de Conjuntura — Ipea'), botao('Preencher o título', () => { c.consultas.ipeaTitulo = `Carta de Conjuntura nº 71, Nota de Conjuntura 24 — ${IPEA.periodo}`; mudou(); redesenhar(); }, 'fantasma pequeno')),
+          h('div', { class: 'cab-linha' }, h('h3', {}, 'Carta de Conjuntura — Ipea'), botao('Preencher o título', () => { c.consultas.ipeaTitulo = `${IPEA.curtoNota} — ${IPEA.periodo}`; mudou(); redesenhar(); }, 'fantasma pequeno')),
           C({ rotulo: 'Título / publicação / período', obj: c.consultas, chave: 'ipeaTitulo', tipo: 'text', placeholder: 'Edição consultada' }),
           C({ rotulo: 'Argumento central e contribuição para a análise', obj: c.consultas, chave: 'ipeaTexto', linhas: 5 }))),
       h('details', { class: 'roteiro' }, h('summary', {}, 'Guia de leitura da Carta de Conjuntura (com páginas)'),
@@ -607,7 +753,7 @@ function vistaDados() {
   };
   return h('div', { class: 'vista larga' },
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Arquivos de apoio do estudo de caso'), h('h1', {}, 'Dados do Relatório Focus e da Carta de Conjuntura'),
-      h('p', { class: 'lead' }, 'Dados transcritos dos dois arquivos de apoio fornecidos na aula de 14/11/2026. Confira sempre os valores no documento original antes de citá-los.')),
+      h('p', { class: 'lead' }, `Dados transcritos das edições em uso neste caso: Focus de ${FOCUS.dataTxt} e ${IPEA.curto} (${IPEA.periodo}). Confira sempre os valores no documento original antes de citá-los. `, h('a', { href: '#/etapa/2' }, 'Trocar de edição na etapa 2'), '.')),
     h('section', { class: 'cartao' }, explorador({ aoUsar: usar, origem: estado.origemDados === 'supabase' ? 'Dados carregados do banco de dados (Supabase).' : 'Dados carregados do arquivo incorporado ao aplicativo.' })));
 }
 
@@ -760,6 +906,47 @@ function haQuanto(iso) {
   if (min < 1440) return `há ${Math.round(min / 60)} h`;
   return `há ${Math.round(min / 1440)} dia(s)`;
 }
+// Calendário dos relatórios: quando sai cada edição e o que já está carregado no aplicativo.
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const dataExtenso = iso => `${Number(iso.slice(8, 10))} de ${MESES[Number(iso.slice(5, 7)) - 1]} de ${iso.slice(0, 4)}`;
+function calendarioRelatorios() {
+  const hoje = ed.hojeISO();
+  const focus = ed.calendarioFocus(hoje), ipea = ed.calendarioIpea();
+  const ROT = { carregado: 'carregado', falta: 'falta pedir a carga', previsto: 'previsto', aguardando: 'aguardando publicação' };
+  const etiqueta = (txt, sit, extra = '') => h('span', { class: `cal-marca ${sit} ${extra}`, title: ROT[sit] }, txt);
+  const marcas = new Map();
+  const por = (iso, m) => { if (iso) marcas.set(iso, [...(marcas.get(iso) || []), m]); };
+  for (const f of focus) por(f.saida, { a: 'Focus', b: f.situacao === 'previsto' ? '' : ed.dataCurta(f.ref), sit: f.situacao });
+  for (const i of ipea) por(i.saida, { a: 'Ipea', b: `nº ${i.edicao.metadados?.numero ?? ''}`, sit: i.situacao });
+  const mes = (ano, m) => {
+    const vazios = (new Date(Date.UTC(ano, m, 1)).getUTCDay() + 6) % 7, dias = new Date(Date.UTC(ano, m + 1, 0)).getUTCDate();
+    return h('div', { class: 'cal-mes' }, h('h3', {}, `${MESES[m][0].toUpperCase()}${MESES[m].slice(1)} de ${ano}`),
+      h('div', { class: 'cal-grade' }, ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'].map(d => h('span', { class: 'cal-dia-sem' }, d)),
+        Array.from({ length: vazios }, () => h('span', {})),
+        Array.from({ length: dias }, (_, k) => {
+          const iso = `${ano}-${String(m + 1).padStart(2, '0')}-${String(k + 1).padStart(2, '0')}`;
+          return h('span', { class: `cal-dia ${iso === hoje ? 'hoje' : ''}` }, h('span', { class: 'cal-num' }, iso === hoje ? `${k + 1} · hoje` : String(k + 1)), (marcas.get(iso) || []).map(x => h('span', { class: `cal-marca ${x.sit}`, title: `${x.a} ${x.b} — ${ROT[x.sit]}` }, h('span', {}, x.a), x.b ? h('span', {}, x.b) : null)));
+        })));
+  };
+  const [a, m] = [Number(hoje.slice(0, 4)), Number(hoje.slice(5, 7)) - 1];
+  const previstos = focus.filter(f => f.situacao === 'previsto').slice(0, 2);
+  const linhasFocus = [...focus.filter(f => f.situacao !== 'previsto'), ...previstos].map(f => h('tr', {},
+    h('td', {}, h('strong', {}, 'Focus')), h('td', {}, f.edicao?.rotulo || dataExtenso(f.ref)),
+    h('td', {}, f.situacao === 'carregado' ? `saiu em ${ed.dataCurta(f.saida)}` : (f.situacao === 'falta' ? `saída prevista para ${ed.dataCurta(f.saida)}` : `previsto para ${ed.dataCurta(f.saida)}`)),
+    h('td', {}, etiqueta(ROT[f.situacao], f.situacao, 'larga'))));
+  const linhasIpea = ipea.map(i => h('tr', {},
+    h('td', {}, h('strong', {}, 'Ipea')), h('td', {}, `Carta ${i.edicao.rotulo}`),
+    h('td', {}, i.situacao === 'carregado' ? `saiu em ${ed.dataCompleta(i.saida)}` : (i.edicao.metadados?.previsaoTxt || (i.saida ? `estimativa: ${ed.dataCurta(i.saida)}` : 'sem data oficial'))),
+    h('td', {}, etiqueta(ROT[i.situacao], i.situacao, 'larga'))));
+  return h('section', { class: 'cartao' }, h('h2', {}, 'Calendário dos relatórios'),
+    h('p', { class: 'ajuda' }, 'Quando sai cada Relatório Focus e cada Carta de Conjuntura do Ipea, e o que já está carregado no aplicativo.'),
+    h('div', { class: 'cal-legenda' }, [['carregado', 'carregado no aplicativo'], ['falta', 'já saiu, falta pedir a carga'], ['previsto', 'previsto']].map(([sit, t]) => h('span', {}, etiqueta('Focus', sit, 'larga'), t))),
+    h('div', { class: 'cal-meses' }, mes(a, m), mes(m === 11 ? a + 1 : a, (m + 1) % 12)),
+    h('div', { class: 'tabela-rolagem' }, h('table', { class: 'tabela' },
+      h('thead', {}, h('tr', {}, ['Relatório', 'Edição', 'Saída', 'Situação'].map(t => h('th', {}, t)))),
+      h('tbody', {}, linhasFocus, linhasIpea))),
+    h('p', { class: 'ajuda' }, 'Focus: sai às segundas-feiras, às 8h25, com as expectativas coletadas até a sexta anterior; em feriado, no dia útil seguinte. Ipea: não há calendário oficial; a previsão segue o histórico das últimas edições (abril, julho, outubro e dezembro). As datas são calculadas por essa regra: o aplicativo não consulta os sites do Banco Central e do Ipea.'));
+}
 function vistaTurma() {
   const corpo = h('div', { class: 'turma-corpo' }, h('p', { class: 'carregando' }, 'Carregando…'));
   const nomeFonte = id => (FONTES_TIPO.find(f => f.id === id)?.nome || id).replace(/ \(.*\)$/, '');
@@ -820,7 +1007,7 @@ function vistaTurma() {
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Administração · visível somente para você'), h('h1', {}, 'Admin'),
       h('p', { class: 'lead' }, 'Quem criou conta, quanto do roteiro já concluiu, quando acessou pela última vez e como personalizou o visual. O conteúdo dos casos dos colegas não é exibido.'),
       h('div', { class: 'acoes' }, botao('Atualizar Progresso da Turma', carregar, 'fantasma'))),
-    corpo);
+    corpo, calendarioRelatorios());
 }
 
 // ---------- Acesso ----------
@@ -864,13 +1051,13 @@ function telaAcesso(modo = 'entrar', msg = '') {
 async function iniciarSessao() {
   raiz.replaceChildren(h('div', { class: 'carregando' }, 'Carregando…'));
   try {
-    const [registro, refs, admin] = await Promise.all([api.carregarCaso(), api.carregarReferencias(), api.ehAdmin()]);
-    hidratarReferencias(refs);
+    const [registro, admin] = await Promise.all([api.carregarCaso(), api.ehAdmin()]);
     estado.admin = admin;
     api.registrarAcesso();
     estado.caso = normalizar(registro?.dados);
     estado.tema = normalizarTema(registro?.tema);
     if (!estado.caso.ident.aluno) estado.caso.ident.aluno = api.usuario()?.user_metadata?.nome || '';
+    await prepararEdicoes(Boolean(registro));
   } catch (e) {
     if (api.remoto && /sess[aã]o/i.test(e.message)) return telaAcesso('entrar', e.message);
     aviso(`Falha ao carregar os dados: ${e.message}`, 'erro');

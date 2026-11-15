@@ -17,12 +17,23 @@ Não há uso de inteligência artificial: os textos analíticos são sempre do a
 
 ## Dados de referência
 
-Os dados foram transcritos dos dois arquivos de apoio da atividade e ficam em `site/js/refdata.js` (fonte única):
+Os dados vêm dos relatórios de apoio da atividade e são organizados em **edições**: cada Relatório Focus e cada Carta de Conjuntura carregados formam uma edição, guardada no Supabase (tabelas `relatorios`, `focus_dados` e `ipea_dados`). Edições carregadas:
 
 - BANCO CENTRAL DO BRASIL. *Focus – Relatório de Mercado*: expectativas de mercado. Brasília: BCB, 23 out. 2026.
+- BANCO CENTRAL DO BRASIL. *Focus – Relatório de Mercado*: expectativas de mercado. Brasília: BCB, 6 nov. 2026.
 - SANTOS, Claudio Hamilton Matos dos; AMITRANO, Cláudio Roberto; ARAUJO, Mônica Mora y. Visão geral da conjuntura. *Carta de Conjuntura*, Brasília: Ipea, n. 71, Nota de Conjuntura 24, 2º trim. 2026.
 
-`npm run seed` gera `supabase/seed.sql` a partir desse arquivo. Cada registro do Ipea traz a página de origem. Os valores devem ser conferidos no documento original antes de serem citados.
+Cada caso usa uma edição de cada relatório. Casos novos começam na mais recente; casos em andamento ficam na edição em que começaram e recebem um aviso quando sai outra. Cada registro do Ipea traz a página de origem. Os valores devem ser conferidos no documento original antes de serem citados.
+
+### Carregar um relatório novo
+
+Não exige nova publicação do site:
+
+1. Transcrever o relatório em `supabase/edicoes/<id>.json` (mesmo formato de `focus-2026-11-06.json`), conferindo os números contra o PDF.
+2. `node scripts/gerar-edicoes.mjs <id>` gera o SQL da edição; executá-lo no Supabase.
+3. `npm run edicoes` atualiza `supabase/edicoes.sql` (todas as edições), para manter o repositório em dia.
+
+A edição de 23/10/2026 e a Carta nº 71 também ficam em `site/js/refdata.js`, como reserva para o modo local ou para falha do banco. As tabelas `fontes_referencia`, `focus_expectativas` e `ipea_indicadores` (e `supabase/seed.sql`) pertencem à versão anterior do site e deixam de ser lidas pela versão atual.
 
 ## Arquitetura
 
@@ -34,7 +45,7 @@ Com `site/js/config.js` vazio, o aplicativo roda em **modo local**: sem login, c
 
 ## Implantação
 
-1. **Supabase**: aplicar `supabase/migrations/001_esquema.sql`, `supabase/migrations/002_admin.sql` e `supabase/seed.sql`; publicar a função `supabase/functions/cadastro` com `verify_jwt = false`; cadastrar um código da turma:
+1. **Supabase**: aplicar `supabase/migrations/001_esquema.sql`, `002_admin.sql` e `003_edicoes.sql`, e depois `supabase/edicoes.sql`; publicar a função `supabase/functions/cadastro` com `verify_jwt = false`; cadastrar um código da turma:
    ```sql
    insert into public.codigos_turma (codigo) values ('ESCOLHA-UM-CODIGO');
    ```
