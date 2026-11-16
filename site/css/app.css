@@ -419,3 +419,26 @@ h2 .selo { margin-left: .4rem; vertical-align: middle; font-family: var(--f-corp
   .rel-impressao h2, .rel-impressao .rel-rot, .rel-impressao .rel-secao > p { break-after: avoid; }
   .rel-impressao .rel-quadro, .rel-impressao .rel-cab, .rel-impressao .rel-linha, .rel-impressao .rel-cadeia { break-inside: avoid; }
 }
+
+/* Aviso de espaço no slide, sob os campos de texto das etapas */
+.campo-slide { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .85rem; min-width: 0; }
+.campo-slide > .campo { margin-bottom: 0; }
+.ae-vivo:empty { display: none; }
+.ae { display: flex; flex-direction: column; gap: .35rem; }
+.ae-barra { height: 6px; background: var(--tom); border-radius: 3px; overflow: hidden; }
+.ae-barra > div { height: 100%; background: var(--c-favoravel); }
+.ae.apertado .ae-barra > div { background: var(--c-destaque); } .ae.nao .ae-barra > div { background: var(--c-adverso); }
+.ae-corpo { display: flex; gap: .3rem 1rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+.ae-msg { margin: 0; display: flex; gap: .45rem; align-items: flex-start; flex: 1 1 180px; font-size: .88rem; }
+.ae-msg strong { color: #22664A; } .ae.apertado .ae-msg strong { color: #7A5A12; } .ae.nao .ae-msg strong { color: #9E352D; }
+.ae-ico { flex: none; display: grid; place-items: center; width: 1.15rem; height: 1.15rem; margin-top: .1rem; border-radius: 50%; background: #22664A; color: #fff; font-size: .74rem; font-weight: 700; line-height: 1; }
+.ae.apertado .ae-ico { background: #F3E2B8; color: #7A5A12; border: 1.5px solid #7A5A12; border-radius: 3px; } .ae.nao .ae-ico { background: #9E352D; border-radius: 3px; }
+.ae-num, .ae-neutro { font-size: .84rem; color: var(--c-suave); font-variant-numeric: tabular-nums; }
+.ae-num { white-space: nowrap; } .ae-neutro { margin: 0; }
+.ae .acoes .btn { min-height: 40px; } .ae .acoes a { font-size: .88rem; padding: .3rem 0; }
+.ae-curta { border: 1px solid var(--c-borda); border-radius: var(--raio); padding: .7rem .8rem; background: var(--c-superficie); display: flex; flex-direction: column; gap: .4rem; align-items: stretch; }
+.ae-curta > .campo { margin-bottom: 0; } .ae-curta > .btn.link { align-self: flex-start; text-align: left; font-weight: 400; font-size: .86rem; min-height: 40px; }
+.ae-faixa { margin-top: .7rem; border: 1px solid var(--c-borda); background: var(--c-superficie); border-radius: var(--raio); padding: .55rem .8rem; font-size: .9rem; display: flex; gap: .3rem 1.2rem; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.ae-faixa > span { flex: 1 1 380px; }
+.ae-faixa label { display: inline-flex; align-items: center; gap: .45rem; min-height: 40px; font-weight: 400; font-size: .9rem; cursor: pointer; }
+.ae-faixa input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--c-primaria); }

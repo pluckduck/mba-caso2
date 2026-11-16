@@ -5,7 +5,7 @@ import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, refe
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste, luminancia, misturar } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
   horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea, quadro, SETA } from './modelo.js';
-import { construir, exportarPptx, notasApresentador, renderHTML, paginaDoSlide, TITULOS } from './slides.js';
+import { construir, exportarPptx, notasApresentador, renderHTML, paginaDoSlide, TITULOS, capacidade, limparTexto } from './slides.js';
 import { montarRelatorio, relatorioHTML, exportarDocx, nomeDoArquivo } from './relatorio.js';
 import { explorador } from './explorador.js';
 import * as ed from './edicoes.js';
@@ -69,6 +69,7 @@ async function salvarAgora() {
   catch (e) { marcarSalvo('erro'); aviso(`Não foi possível salvar: ${e.message}`, 'erro'); }
 }
 function mudou() {
+  encaixeMemo = null;
   marcarSalvo('pendente');
   clearTimeout(tSalvar); tSalvar = setTimeout(salvarAgora, 900);
   clearTimeout(tVivo); tVivo = setTimeout(() => { vivos.forEach(f => f()); atualizarNav(); }, 220);
@@ -218,13 +219,14 @@ function desenharRota(manterRolagem = false) {
   const main = document.getElementById('conteudo');
   if (!main) return;
   const y = window.scrollY;
-  vivos = [];
+  vivos = []; encaixeMemo = null;
   const r = rotaAtual();
   let vista;
   if (r.startsWith('etapa/')) vista = ({ 1: etapa1, 2: etapa2, 3: etapa3, 4: etapa4, 5: etapa5 }[Number(r.split('/')[1])] || painel)();
   else if (r === 'turma' && estado.admin) vista = vistaTurma();
   else vista = ({ painel, entrega: vistaEntrega, slides: vistaSlides, relatorio: vistaRelatorio, dados: vistaDados, tema: vistaTema, fontes: vistaFontes }[r] || painel)();
   main.replaceChildren(vista);
+  if (focoCurta) { main.querySelector(`[data-curta="${CSS.escape(focoCurta)}"]`)?.focus(); focoCurta = null; }
   atualizarNav();
   window.scrollTo(0, manterRolagem ? y : 0);
 }
@@ -239,7 +241,8 @@ function cabecalhoEtapa(n) {
     vivo(() => {
       const itens = validar(estado.caso).filter(i => i.etapa === n);
       return h('ul', { class: 'criterios' }, itens.map(i => h('li', { class: i.ok ? 'ok' : '' }, h('span', { class: 'marca-ok' }, i.ok ? '✓' : '○'), i.texto, i.detalhe && !i.ok ? h('em', {}, ` (${i.detalhe})`) : null)));
-    }));
+    }),
+    faixaAvisosEspaco());
 }
 function rodapeEtapa(n) {
   return h('footer', { class: 'pe-etapa' },
@@ -247,6 +250,88 @@ function rodapeEtapa(n) {
     n < 5 ? botao(`${ETAPAS[n].titulo} →`, () => ir(`etapa/${n + 1}`), 'primario') : botao('Ir para a entrega →', () => ir('entrega'), 'primario'));
 }
 const C = (o) => campo({ aoMudar: mudou, ...o });
+
+// ---------- Aviso de espaço no slide (campos das etapas) ----------
+// Cada campo de texto das etapas mostra a contagem de caracteres e se o texto cabe no bloco do slide em que aparece,
+// usando o mesmo cálculo de encaixe dos slides (tema e número de variáveis atuais). O relatório não tem limite.
+let encaixeMemo = null, focoCurta = null;
+function encaixeAtual() {
+  if (!encaixeMemo) {
+    const tema = temaAtual(), r = construir(estado.caso, tema);
+    encaixeMemo = { tema, blocos: new Map(r.blocos.map(b => [b.key, b])), encaixe: r.encaixe };
+  }
+  return encaixeMemo;
+}
+const dezena = n => Math.max(10, Math.floor(n / 10) * 10);
+const nCar = n => plural(n, 'caractere', 'caracteres');
+const noSlide = e => `no ${e.rotulo.replace(/^S/, 's')}`;
+const linhaNeutra = (...filhos) => h('p', { class: 'ae-neutro' }, ...filhos);
+// Linha de estado: barra de ocupação, estado em palavras, contagem e, se couber, a ação de resumir.
+function linhaEstado(e, trecho, { curta = false, composto = false, acao = null } = {}) {
+  const cap = capacidade(e.el, encaixeAtual().tema, trecho), n = trecho.length;
+  const conf = cap ? Math.max(dezena(cap.conforto), e.estado === 'ok' ? n : 0) : null, lim = cap ? Math.max(dezena(cap.limite), e.estado === 'nao' ? 0 : n) : null;
+  const relatorio = curta ? ' O relatório continua usando o texto completo acima.' : ' No relatório, entra completo.';
+  const divide = composto ? ' Este texto divide o espaço com outros campos do mesmo bloco do slide.' : '';
+  const [ico, titulo, detalhe, numero] = {
+    ok: ['✓', `Cabe ${noSlide(e)}.`, `${divide}${curta ? relatorio : ''}`, conf ? `${nCar(n)} · cabem cerca de ${conf}` : nCar(n)],
+    apertado: ['!', `Apertado ${noSlide(e)}.`, ` Para caber, a letra diminui para ${fmt(e.size, 1)} pt e fica difícil de ler na projeção.${conf ? ` Leitura confortável até cerca de ${nCar(conf)}.` : ''}${divide}${relatorio}`, conf ? `${nCar(n)} · confortável até ${conf}` : nCar(n)],
+    nao: ['×', `Não cabe ${noSlide(e)}.`, ` O final do texto seria cortado${lim ? `: cabem cerca de ${nCar(lim)}` : ''}.${divide}${relatorio}`, lim ? `${nCar(n)} · cabem cerca de ${lim}` : nCar(n)],
+  }[e.estado];
+  const pct = e.estado === 'ok' && conf ? Math.min(100, Math.round((n / conf) * 100)) : 100;
+  return h('div', { class: `ae ${e.estado}` },
+    h('div', { class: 'ae-barra', role: 'img', 'aria-label': `Ocupação do espaço do slide: ${pct}%` }, h('div', { style: `width:${pct}%` })),
+    h('div', { class: 'ae-corpo' },
+      h('p', { class: 'ae-msg' }, h('span', { class: 'ae-ico', 'aria-hidden': 'true' }, ico), h('span', {}, h('strong', {}, titulo), detalhe)),
+      h('span', { class: 'ae-num' }, numero)),
+    e.estado !== 'ok' && acao ? h('div', { class: 'acoes' }, acao) : null);
+}
+// Campo de texto com aviso de espaço. "diretas": blocos de slide formados só por este campo (aceitam versão curta aqui mesmo);
+// "compostas": blocos que juntam este campo com outros (a versão resumida do bloco é feita na tela dos slides).
+function CS(o, diretas = [], compostas = []) {
+  const c = estado.caso;
+  const valor = () => limparTexto(o.obj[o.chave]);
+  const keyCurta = diretas.find(k => typeof c.slides.textos[k] === 'string') || null;
+  const avisoPrincipal = vivo(() => {
+    const t = valor(), n = t.length;
+    if (!n) return null;
+    if (c.entrega.avisos === false) return linhaNeutra(nCar(n));
+    const { blocos, encaixe } = encaixeAtual();
+    if (keyCurta) return linhaNeutra(`${nCar(n)} · o slide usa a versão curta abaixo; o relatório usa este texto completo.`);
+    const direta = diretas.find(k => blocos.get(k)?.padrao === t);
+    const composta = direta ? null : compostas.find(k => blocos.get(k)?.padrao.includes(t));
+    const key = direta || composta;
+    if (!key) return linhaNeutra(`${nCar(n)} · este texto não aparece nos slides; no relatório, entra completo.`);
+    if (blocos.get(key).editado) return linhaNeutra(`${nCar(n)} · o slide usa uma versão resumida deste bloco. `, h('a', { href: '#/slides' }, 'Ver na tela dos slides'));
+    const e = encaixe[key];
+    if (!e) return linhaNeutra(nCar(n));
+    const acao = direta
+      ? botao('Escrever versão curta para o slide', () => { c.slides.textos[key] = t; focoCurta = key; mudou(); redesenhar(); }, 'contorno')
+      : h('a', { href: '#/slides' }, 'Resumir este bloco na tela dos slides');
+    return linhaEstado(e, t, { composto: !direta, acao });
+  }, 'ae-vivo');
+  let curta = null;
+  if (keyCurta) {
+    const id = `curta-${keyCurta.replace(/[^\w]+/g, '-')}`;
+    curta = h('div', { class: 'ae-curta' },
+      h('div', { class: 'campo' }, h('label', { for: id }, 'Versão curta para o slide'),
+        h('textarea', { id, rows: 2, 'data-curta': keyCurta, oninput: e => { c.slides.textos[keyCurta] = e.target.value; mudou(); } }, c.slides.textos[keyCurta])),
+      vivo(() => {
+        const t = limparTexto(c.slides.textos[keyCurta] ?? ''), e = encaixeAtual().encaixe[keyCurta];
+        if (!t) return linhaNeutra('A versão curta está vazia: o slide fica sem este texto.');
+        if (c.entrega.avisos === false) return linhaNeutra(nCar(t.length));
+        if (!e) return linhaNeutra(`${nCar(t.length)} · este bloco não aparece nos slides no formato atual.`);
+        return linhaEstado(e, t, { curta: true });
+      }, 'ae-vivo'),
+      botao('Remover a versão curta e usar o texto completo no slide', () => { delete c.slides.textos[keyCurta]; mudou(); redesenhar(); }, 'link'));
+  }
+  return h('div', { class: 'campo-slide' }, C(o), avisoPrincipal, curta);
+}
+function faixaAvisosEspaco() {
+  const c = estado.caso;
+  return h('div', { class: 'ae-faixa' },
+    h('span', {}, 'Os avisos de espaço valem só para os ', h('strong', {}, 'slides'), ', calculados com o tema e o número de variáveis atuais. No ', h('strong', {}, 'relatório'), ' não há limite: o texto entra completo.'),
+    h('label', {}, h('input', { type: 'checkbox', checked: c.entrega.avisos !== false, onchange: e => { c.entrega.avisos = e.target.checked; mudou(); } }), 'Mostrar avisos de espaço dos slides'));
+}
 
 // ---------- Painel ----------
 function painel() {
@@ -333,9 +418,9 @@ function etapa1() {
         C({ rotulo: 'Autor (participante)', obj: c.ident, chave: 'aluno', tipo: 'text', placeholder: 'Seu nome completo' }),
         C({ rotulo: 'Empresa analisada', obj: c.ident, chave: 'empresa', tipo: 'text', placeholder: 'Empresa conhecida, de preferência a mesma do Estudo de Caso 1' }))),
     h('section', { class: 'cartao' }, h('h2', {}, 'Diagnóstico do negócio'),
-      C({ rotulo: 'Setor e portfólio', ajuda: 'Setor de atuação e principais produtos ou serviços.', obj: c.diag, chave: 'setor' }),
-      C({ rotulo: 'Perfil dos clientes', ajuda: 'Segmentos atendidos e necessidades que orientam a compra.', obj: c.diag, chave: 'clientes' }),
-      C({ rotulo: 'Dinâmica do mercado', ajuda: 'Características do mercado relevantes para o desempenho comercial (concorrência, sazonalidade, canais, dependência de crédito ou de importados).', obj: c.diag, chave: 'mercado' })),
+      CS({ rotulo: 'Setor e portfólio', ajuda: 'Setor de atuação e principais produtos ou serviços.', obj: c.diag, chave: 'setor' }, ['s1.setor']),
+      CS({ rotulo: 'Perfil dos clientes', ajuda: 'Segmentos atendidos e necessidades que orientam a compra.', obj: c.diag, chave: 'clientes' }, ['s1.clientes']),
+      CS({ rotulo: 'Dinâmica do mercado', ajuda: 'Características do mercado relevantes para o desempenho comercial (concorrência, sazonalidade, canais, dependência de crédito ou de importados).', obj: c.diag, chave: 'mercado' }, ['s1.mercado'])),
     h('section', { class: 'cartao' }, h('h2', {}, 'Exposição macroeconômica'),
       h('p', { class: 'ajuda' }, 'Marque no mínimo três variáveis econômicas relevantes para a empresa. Elas serão investigadas na etapa 2 e projetadas na etapa 3.'),
       h('div', { class: 'legenda-fontes' },
@@ -367,7 +452,7 @@ function etapa1() {
           h('span', {}, v.nome || 'Outra variável (defina o nome na etapa 2)', catalogo(v.tipo)?.externa ? selo('Fonte externa', 'externa') : null),
           h('div', { class: 'segmentos', role: 'radiogroup', 'aria-label': `Sensibilidade a ${v.nome}` }, [[1, 'Baixa'], [2, 'Média'], [3, 'Alta']].map(([n, t]) =>
             h('button', { role: 'radio', 'aria-checked': String(Number(v.sensibilidade) === n), class: Number(v.sensibilidade) === n ? 'ativo' : '', onclick: () => { v.sensibilidade = n; mudou(); redesenhar(); } }, t)))))) : null,
-      C({ rotulo: 'Variáveis prioritárias e mecanismos de transmissão', ajuda: 'Explique por quais mecanismos essas variáveis afetam o negócio (por exemplo: juros → custo do financiamento do cliente → adiamento de compras).', obj: c.diag, chave: 'exposicao', linhas: 4 })),
+      CS({ rotulo: 'Variáveis prioritárias e mecanismos de transmissão', ajuda: 'Explique por quais mecanismos essas variáveis afetam o negócio (por exemplo: juros → custo do financiamento do cliente → adiamento de compras).', obj: c.diag, chave: 'exposicao', linhas: 4 }, ['s1.exposicao'])),
     rodapeEtapa(1));
 }
 
@@ -529,13 +614,13 @@ function cartaoVariavel(v, i) {
       C({ rotulo: 'Nome da variável', obj: v, chave: 'nome', tipo: 'text', placeholder: 'Ex.: Taxa de juros (Selic)' }),
       C({ rotulo: 'Unidade', obj: v, chave: 'unidade', tipo: 'text', placeholder: '%, % a.a., R$/US$…' })),
     vivo(() => quadroVariavel(v)),
-    C({ rotulo: 'Leitura da tendência', ajuda: 'O que os números indicam (alta, queda, estabilidade), em uma frase. Ela aparece no slide 2, logo abaixo dos números.', obj: v, chave: 'tendencia', linhas: 2 }),
+    CS({ rotulo: 'Leitura da tendência', ajuda: 'O que os números indicam (alta, queda, estabilidade), em uma frase. Ela aparece no slide 2, logo abaixo dos números.', obj: v, chave: 'tendencia', linhas: 2 }, [`s2.tendencia.${v.uid}`]),
     vivo(() => {
       const l = quadro(v).leitura;
       return l && String(v.tendencia || '').trim() !== l ? h('div', { class: 'faixa-origem sugestao' }, h('span', {}, h('span', { class: 'selo contagem' }, 'Leitura sugerida'), l),
         botao('Usar a sugestão', () => { v.tendencia = l; if (v.origem) v.origem.tend = l; mudou(); redesenhar(); }, 'fantasma pequeno')) : null;
     }),
-    C({ rotulo: 'Implicação para o mercado da empresa', ajuda: 'Como essa variável afeta os clientes e o desempenho comercial da empresa analisada.', obj: v, chave: 'implicacao' }),
+    CS({ rotulo: 'Implicação para o mercado da empresa', ajuda: 'Como essa variável afeta os clientes e o desempenho comercial da empresa analisada.', obj: v, chave: 'implicacao' }, [`s2.implicacao.${v.uid}`]),
     roteiro(v),
     h('details', { class: 'roteiro rastreio', open: ext || !v.origem || !rastreioCompleto },
       h('summary', {}, 'Fonte e rastreio do dado', rastreioCompleto ? h('span', { class: 'resumo-rastreio' }, [v.dado, v.natureza, v.fonte, v.publicacao, v.periodo].join(' · ')) : h('span', { class: 'resumo-rastreio pendente' }, 'preencha o dado, a natureza, a fonte, a data e o período')),
@@ -559,11 +644,11 @@ function etapa2() {
         h('div', {},
           h('div', { class: 'cab-linha' }, h('h3', {}, 'Relatório Focus'), botao('Preencher a data do relatório', () => { c.consultas.focusData = FOCUS.dataTxt; mudou(); redesenhar(); }, 'fantasma pequeno')),
           C({ rotulo: 'Data / período', obj: c.consultas, chave: 'focusData', tipo: 'text', placeholder: 'Data do relatório consultado' }),
-          C({ rotulo: 'Expectativas relevantes e contribuição para a análise', obj: c.consultas, chave: 'focusTexto', linhas: 5 })),
+          CS({ rotulo: 'Expectativas relevantes e contribuição para a análise', obj: c.consultas, chave: 'focusTexto', linhas: 5 }, ['s2.focus'])),
         h('div', {},
           h('div', { class: 'cab-linha' }, h('h3', {}, 'Carta de Conjuntura — Ipea'), botao('Preencher o título', () => { c.consultas.ipeaTitulo = `${IPEA.curtoNota} — ${IPEA.periodo}`; mudou(); redesenhar(); }, 'fantasma pequeno')),
           C({ rotulo: 'Título / publicação / período', obj: c.consultas, chave: 'ipeaTitulo', tipo: 'text', placeholder: 'Edição consultada' }),
-          C({ rotulo: 'Argumento central e contribuição para a análise', obj: c.consultas, chave: 'ipeaTexto', linhas: 5 }))),
+          CS({ rotulo: 'Argumento central e contribuição para a análise', obj: c.consultas, chave: 'ipeaTexto', linhas: 5 }, ['s2.ipea']))),
       h('details', { class: 'roteiro' }, h('summary', {}, 'Guia de leitura da Carta de Conjuntura (com páginas)'),
         h('ul', {}, IPEA.argumentos.map(a => h('li', {}, h('strong', {}, `${a.titulo}: `), a.texto, h('em', {}, ` (p. ${a.pagina})`)))))),
     rodapeEtapa(2));
@@ -591,7 +676,7 @@ function etapa3() {
       pintar();
       return h('div', { class: `cen-col ${s.id}` }, h('h4', {}, s.curto),
         h('div', { class: 'valor-linha' }, entrada, h('span', { class: 'unid' }, v.unidade)), faixa, tag, sel,
-        C({ rotulo: 'Justificativa', obj: t, chave: 'justificativa', linhas: 2, placeholder: 'Por que este valor neste cenário?' }));
+        CS({ rotulo: 'Justificativa', obj: t, chave: 'justificativa', linhas: 2, placeholder: 'Por que este valor neste cenário?' }, [`s3.just.${s.id}.${v.uid}`], [`s3.fund.${s.id}`]));
     };
     return h('section', { class: 'cartao' },
       h('div', { class: 'cab-linha' }, h('h3', {}, v.nome), h('span', { class: 'ajuda' }, v.dado ? `Evidência registrada: ${v.dado} (${v.periodo || 'período não informado'})` : 'Sem evidência registrada na etapa 2')),
@@ -620,11 +705,11 @@ function etapa3() {
     h('div', { class: 'grade-3 cen-grade' }, CENARIOS.map(s => {
       const cen = c.cenarios[s.id];
       return h('section', { class: `cartao cen-col ${s.id}` }, h('h3', {}, s.nome), h('p', { class: 'ajuda' }, s.desc),
-        C({ rotulo: 'Condição econômica e premissas centrais', obj: cen, chave: 'premissas', linhas: 4 }),
+        CS({ rotulo: 'Condição econômica e premissas centrais', obj: cen, chave: 'premissas', linhas: 4 }, [`s3.premissas.${s.id}`]),
         h('div', { class: 'cab-linha' }, h('label', {}, 'Projeções publicadas — fonte e data'), botao('Listar automaticamente', () => { const t = listar(s, 'P'); if (!t) return aviso('Nenhum valor deste cenário coincide com um valor publicado no Focus ou no Ipea.', 'alerta'); cen.publicadas = t; mudou(); redesenhar(); }, 'fantasma pequeno')),
-        C({ obj: cen, chave: 'publicadas', linhas: 3 }),
+        CS({ obj: cen, chave: 'publicadas', linhas: 3 }, [], [`s3.fund.${s.id}`]),
         h('div', { class: 'cab-linha' }, h('label', {}, 'Hipóteses próprias — fundamentação'), botao('Listar hipóteses', () => { const t = listar(s, 'H'); if (!t) return aviso('Nenhum valor deste cenário é hipótese própria.', 'alerta'); cen.hipoteses = t; mudou(); redesenhar(); }, 'fantasma pequeno')),
-        C({ obj: cen, chave: 'hipoteses', linhas: 3 }));
+        CS({ obj: cen, chave: 'hipoteses', linhas: 3 }, [], [`s3.fund.${s.id}`]));
     })),
     h('details', { class: 'roteiro cartao' }, h('summary', {}, 'Fatores de risco apontados pelo Ipea (apoio para os cenários favorável e adverso)'),
       h('ul', {}, IPEA.argumentos.filter(a => /Riscos|Choque|Endividamento|Crédito/.test(a.titulo)).map(a => h('li', {}, h('strong', {}, `${a.titulo}: `), a.texto, h('em', {}, ` (p. ${a.pagina})`))))),
@@ -646,7 +731,7 @@ function etapa4() {
     h('div', { class: 'matriz' },
       h('div', { class: 'matriz-cab' }, h('span', {}), CENARIOS.map(s => h('strong', { class: `cen-tit ${s.id}` }, s.nome))),
       DIMENSOES.map(d => h('div', { class: 'matriz-linha' }, h('span', { class: 'matriz-rot' }, d.nome),
-        CENARIOS.map(s => C({ obj: c.impactos[s.id], chave: d.id, linhas: 3, atributos: { 'aria-label': `${d.nome} — ${s.nome}` } }))))));
+        CENARIOS.map(s => CS({ obj: c.impactos[s.id], chave: d.id, linhas: 3, atributos: { 'aria-label': `${d.nome} — ${s.nome}` } }, [`s4.${d.id}.${s.id}`]))))));
   const cadeias = h('section', { class: 'cartao' }, h('h2', {}, 'Fundamentação: variável → efeito no cliente → efeito nas vendas'),
     vars.length ? vars.map(v => {
       const cat = catalogo(v.tipo);
@@ -661,8 +746,8 @@ function etapa4() {
           };
           return h('div', { class: `cen-col ${s.id}` },
             h('div', { class: 'cab-linha' }, h('h4', {}, s.curto), h('span', { class: `dir ${d || ''}` }, d ? `${ROT_DIR[d]} ${ref}` : 'sem valor na etapa 3')),
-            C({ rotulo: 'Efeito no cliente', obj: k, chave: 'cliente', linhas: 2 }),
-            C({ rotulo: 'Efeito nas vendas', obj: k, chave: 'vendas', linhas: 2 }),
+            CS({ rotulo: 'Efeito no cliente', obj: k, chave: 'cliente', linhas: 2 }, s.id === 'base' ? [`s4.cad.cliente.${v.uid}`] : [], s.id === 'base' ? ['s4.cadeia'] : []),
+            CS({ rotulo: 'Efeito nas vendas', obj: k, chave: 'vendas', linhas: 2 }, s.id === 'base' ? [`s4.cad.vendas.${v.uid}`] : [], s.id === 'base' ? ['s4.cadeia'] : []),
             cat?.sobe.cliente ? botao('Inserir roteiro genérico', sugerir, 'fantasma pequeno') : null);
         })));
     }) : h('p', {}, 'Defina as variáveis nas etapas anteriores.'),
@@ -692,17 +777,17 @@ function etapa5() {
     c.decisoes.map((d, i) => h('section', { class: 'cartao' },
       h('div', { class: 'cab-linha' }, h('h3', {}, `Decisão ${i + 1}`, i > 2 ? h('small', {}, ' (aparece só no relatório; o slide 5 traz as três primeiras)') : null),
         c.decisoes.length > 3 ? botao('Remover', () => { c.decisoes.splice(i, 1); mudou(); redesenhar(); }, 'fantasma pequeno') : null),
-      C({ rotulo: 'Ação comercial proposta', obj: d, chave: 'acao', linhas: 2 }),
+      CS({ rotulo: 'Ação comercial proposta', obj: d, chave: 'acao', linhas: 2 }, [`s5.acao.${d.uid}`]),
       h('fieldset', { class: 'marcas' }, h('legend', {}, 'Cenário(s) de aplicação'),
         h('div', { class: 'marcas-opcoes' }, CENARIOS.map(s => h('label', {}, h('input', { type: 'checkbox', checked: d.cenarios.includes(s.id), onchange: e => { d.cenarios = CENARIOS.map(x => x.id).filter(id => (id === s.id ? e.target.checked : d.cenarios.includes(id))); mudou(); } }), s.curto))),
         h('p', { class: 'ajuda' }, 'Marque em quais cenários a decisão vale. Vai para o quadro 05 do relatório.')),
       h('div', { class: 'grade-3' },
-        C({ rotulo: 'Indicador, evidência e impacto que sustentam a decisão', obj: d, chave: 'evidencia', linhas: 4 }),
-        C({ rotulo: 'Risco mitigado ou oportunidade capturada', obj: d, chave: 'risco', linhas: 4 }),
-        C({ rotulo: 'Contribuição esperada para vendas e rentabilidade', obj: d, chave: 'contribuicao', linhas: 4 })))),
+        CS({ rotulo: 'Indicador, evidência e impacto que sustentam a decisão', obj: d, chave: 'evidencia', linhas: 4 }, [`s5.evidencia.${d.uid}`]),
+        CS({ rotulo: 'Risco mitigado ou oportunidade capturada', obj: d, chave: 'risco', linhas: 4 }, [`s5.risco.${d.uid}`]),
+        CS({ rotulo: 'Contribuição esperada para vendas e rentabilidade', obj: d, chave: 'contribuicao', linhas: 4 }, [`s5.contribuicao.${d.uid}`])))),
     h('div', { class: 'acoes' }, botao('+ Adicionar decisão', () => { c.decisoes.push(novaDecisao()); mudou(); redesenhar(); }, 'fantasma')),
     h('section', { class: 'cartao' }, h('h2', {}, 'Síntese executiva'),
-      C({ ajuda: 'Consolide a leitura do cenário, as principais implicações para a empresa e a justificativa das decisões recomendadas. Reflexão final do roteiro: como transformar indicadores e expectativas econômicas em decisões comerciais capazes de melhorar a competitividade e preservar a rentabilidade?', obj: c, chave: 'sintese', linhas: 5 })),
+      CS({ ajuda: 'Consolide a leitura do cenário, as principais implicações para a empresa e a justificativa das decisões recomendadas. Reflexão final do roteiro: como transformar indicadores e expectativas econômicas em decisões comerciais capazes de melhorar a competitividade e preservar a rentabilidade?', obj: c, chave: 'sintese', linhas: 5 }, ['s5.sintese'])),
     h('section', { class: 'cartao' }, h('h2', {}, 'Validação da entrega'),
       vivo(() => { const itens = validar(c); return h('ul', { class: 'criterios todos' }, itens.map(i => h('li', { class: i.ok ? 'ok' : '' }, h('span', { class: 'marca-ok' }, i.ok ? '✓' : '○'), h('a', { href: `#/etapa/${i.etapa}` }, `Etapa ${i.etapa}`), ' — ', i.texto, i.detalhe && !i.ok ? h('em', {}, ` (${i.detalhe})`) : null))); })),
     rodapeEtapa(5));

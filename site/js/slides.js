@@ -16,6 +16,7 @@ export const TITULOS = [
 
 const sobre = cor => (luminancia(cor) > 0.42 ? '#111111' : '#FFFFFF');
 const limpo = s => String(s ?? '').replace(/\s+\n/g, '\n').trim();
+export const limparTexto = limpo;
 const R = (x, y, w, h, o = {}) => ({ t: 'rect', x, y, w, h, ...o });
 const E = (x, y, w, h, o = {}) => ({ t: 'ellipse', x, y, w, h, ...o });
 const LN = (x, y, w, h, o = {}) => ({ t: 'line', x, y, w, h, ...o });
@@ -86,6 +87,44 @@ function ajustar(el, tema) {
   return r;
 }
 
+// ---------- Encaixe dos textos do caso nos slides (avisos de espaço das etapas) ----------
+// Tamanho de letra abaixo do qual a leitura em projeção fica difícil. Se o mínimo do bloco já é maior, não existe o estado "apertado".
+const conforto = el => Math.max(el.min, Math.min(8.5, el.max - 1));
+// Elemento de texto da página que mostra o texto de um bloco (o texto pode vir com prefixo ou junto de outras linhas).
+function elementoDoBloco(els, texto) {
+  if (!texto) return null;
+  const textos = els.filter(e => e.t === 'text');
+  return textos.find(e => e.paras.some(p => p.text === texto)) || textos.find(e => e.paras.map(p => p.text).join('\n').includes(texto)) || null;
+}
+// Quantos caracteres do trecho cabem no elemento, mantido o restante do conteúdo: "limite" (no tamanho mínimo de letra, antes
+// de cortar) e "conforto" (sem a letra ficar pequena demais). A estimativa repete o próprio texto como sonda; null se o
+// trecho não está inteiro em um parágrafo do elemento.
+const cacheCapacidade = new Map();
+export function capacidade(el, tema, trecho) {
+  const i = trecho ? el.paras.findIndex(p => p.text.includes(trecho)) : -1;
+  if (i < 0) return null;
+  const css = fonteCss(tema.fontes[el.fonte]);
+  const chave = JSON.stringify([el.paras, i, trecho, el.w, el.h, el.max, el.min, css, el.bold]);
+  if (cacheCapacidade.has(chave)) return cacheCapacidade.get(chave);
+  const base = el.paras[i].text, pos = base.indexOf(trecho);
+  const semente = trecho.length >= 40 ? trecho : `${trecho} texto de exemplo para estimar o espaço disponível neste bloco do slide`;
+  const sonda = n => { let s = trecho; while (s.length < n) s += ` ${semente}`; return s.slice(0, n); };
+  const paras = n => el.paras.map((p, k) => { const q = k === i ? { ...p, text: base.slice(0, pos) + sonda(n) + base.slice(pos + trecho.length) } : p; return el.bold ? { ...q, bold: true } : q; });
+  const cabe = (n, pt) => altura(paras(n), el.w, pt, css) <= el.h + 0.01;
+  const maximo = pt => {
+    if (!cabe(1, pt)) return 0;
+    let lo = 1, hi = 64;
+    while (hi <= 4096 && cabe(hi, pt)) { lo = hi; hi *= 2; }
+    while (hi - lo > 6) { const m = (lo + hi) >> 1; if (cabe(m, pt)) lo = m; else hi = m; }
+    return lo;
+  };
+  const limite = maximo(el.min);
+  const r = { limite, conforto: conforto(el) > el.min ? Math.min(limite, maximo(conforto(el))) : limite };
+  if (cacheCapacidade.size > 2000) cacheCapacidade.clear();
+  cacheCapacidade.set(chave, r);
+  return r;
+}
+
 // Página em construção e total de páginas (definidos por construir): um slide do roteiro pode ocupar mais de uma página.
 let paginaAtual = null, totalPaginas = 5;
 
@@ -96,8 +135,9 @@ function criarContexto(caso, tema) {
   const txt = (slide, key, rotulo, padrao) => {
     const original = limpo(padrao);
     const editado = caso.slides.textos[key];
-    blocos.push({ slide, pag: paginaAtual ? paginaAtual.seq - 1 : slide - 1, key, rotulo, padrao: original, editado: typeof editado === 'string' });
-    return typeof editado === 'string' ? limpo(editado) : original;
+    const texto = typeof editado === 'string' ? limpo(editado) : original;
+    blocos.push({ slide, pag: paginaAtual ? paginaAtual.seq - 1 : slide - 1, key, rotulo, padrao: original, editado: typeof editado === 'string', texto });
+    return texto;
   };
   const raio = Math.min(0.3, (tema.el.raio || 0) / 90);
   const tom = misturar(c.superficie, c.primaria, luminancia(c.fundo) < 0.35 ? 0.16 : 0.07);
@@ -570,6 +610,8 @@ export function construir(caso, tema) {
   }));
   paginaAtual = null;
   const alertas = [];
+  // encaixe[chave do bloco]: como o texto do bloco ficou no slide (cabe, apertado ou cortado), para os avisos das etapas.
+  const encaixe = {};
   slides.forEach((els, i) => {
     let menor = 99, cortes = 0;
     for (const el of els) {
@@ -580,10 +622,15 @@ export function construir(caso, tema) {
       if (r.cortado) cortes++;
     }
     const rot = paginas[i].rotulo;
+    for (const b of ctx.blocos) {
+      if (b.pag !== i) continue;
+      const el = elementoDoBloco(els, b.texto);
+      if (el) encaixe[b.key] = { slide: paginas[i].n, rotulo: rot, size: el.size, cortado: el.cortado, estado: el.cortado ? 'nao' : el.size < conforto(el) ? 'apertado' : 'ok', el };
+    }
     if (cortes) alertas.push({ slide: paginas[i].n, tipo: 'corte', texto: `${rot}: ${cortes === 1 ? '1 bloco de texto não coube e foi cortado' : `${cortes} blocos de texto não couberam e foram cortados`}. Resuma o texto do slide.` });
     else if (menor < 8.5) alertas.push({ slide: paginas[i].n, tipo: 'fonte', texto: `${rot}: há texto em corpo ${fmt(menor, 1)} pt, difícil de ler em projeção. Considere resumir.` });
   });
-  return { slides, paginas, blocos: ctx.blocos, alertas };
+  return { slides, paginas, blocos: ctx.blocos, alertas, encaixe };
 }
 // Índice da primeira página de um slide do roteiro (1 a 5) no resultado de construir.
 export const paginaDoSlide = (res, n) => Math.max(0, res.paginas.findIndex(p => p.n === n));

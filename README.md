@@ -16,6 +16,8 @@ Aplicativo guiado para a execução individual do Estudo de Caso 2 da disciplina
 
 A tela **Entrega: slides ou relatório** deixa o participante escolher o formato; os dois saem do mesmo caso. O relatório tem aparência fixa (tabelas do material da disciplina) e não usa o tema visual. Campos vazios saem como linhas em branco. O slide 5 traz as três primeiras decisões e avisa quantas outras estão no relatório.
 
+Nas etapas, cada campo de texto mostra a contagem de caracteres e um **aviso de espaço**: se o texto cabe, fica apertado ou não cabe no slide em que aparece. O aviso usa o mesmo cálculo de encaixe dos slides (tema e número de variáveis atuais) e pode ser desligado. Quando o texto não cabe, o participante pode escrever ali mesmo uma **versão curta só para o slide**; o relatório continua com o texto completo.
+
 Não há uso de inteligência artificial: os textos analíticos são sempre do aluno. Os "roteiros de raciocínio" são sugestões didáticas genéricas e estão identificados como tal.
 
 ## Dados de referência

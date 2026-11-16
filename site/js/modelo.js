@@ -49,7 +49,7 @@ export function casoVazio() {
     decisoes: [novaDecisao(), novaDecisao(), novaDecisao()],
     sintese: '',
     slides: { textos: {} },
-    entrega: { formato: '' },   // último formato de entrega aberto: 'slides' ou 'relatorio'
+    entrega: { formato: '', avisos: true },   // último formato aberto ('slides' ou 'relatorio') e avisos de espaço dos slides nas etapas
   };
 }
 
