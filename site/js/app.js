@@ -1171,7 +1171,7 @@ function painelAvaliacoesEl() {
     const dist = [5, 4, 3, 2, 1, 0].map(v => ({ rotulo: v === 1 ? '1 estrela' : `${v} estrelas`, valor: lista.filter(l => l.nota === v).length, cor: '#C98A06' }));
     el.replaceChildren(h('h2', {}, 'Avaliações do aplicativo'),
       h('p', { class: 'ajuda' }, 'Pedidas uma vez a cada participante, logo depois da primeira exportação da entrega (PPTX, Word ou PDF). A nota vai de 0 a 5 estrelas; o comentário é opcional.'),
-      n ? [
+      ...(n ? [
         h('div', { class: 'kpis' },
           kpi('Avaliações recebidas', String(n)),
           kpi('Nota média', media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }), ' de 5'),
@@ -1184,7 +1184,7 @@ function painelAvaliacoesEl() {
             h('td', { class: 'num' }, estrelasTxt(l.nota), h('div', { class: 'nota' }, `${l.nota} de 5`)),
             h('td', { class: 'aval-comentario' }, (l.comentario || '').trim() || h('span', { class: 'nota' }, 'sem comentário')),
             h('td', {}, dataHora(l.criado_em), h('div', { class: 'nota' }, ROT_ORIGEM[l.origem] || ''))))))),
-      ] : h('p', {}, 'Nenhuma avaliação recebida ainda.'));
+      ] : [h('p', {}, 'Nenhuma avaliação recebida ainda.')]));
   }).catch(e => el.replaceChildren(h('h2', {}, 'Avaliações do aplicativo'), h('p', { class: 'erro' }, `Não foi possível carregar: ${e.message}`)));
   return el;
 }
