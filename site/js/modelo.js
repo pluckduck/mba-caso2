@@ -29,7 +29,8 @@ let seq = 0;
 export const uid = () => `${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export const novaVariavel = () => ({ uid: uid(), tipo: '', nome: '', dado: '', valorNum: null, unidade: '', natureza: '', fonte: '', publicacao: '', periodo: '', tendencia: '', implicacao: '', sensibilidade: 2, origem: null });
-export const novaDecisao = () => ({ uid: uid(), acao: '', evidencia: '', risco: '', contribuicao: '' });
+// cenarios: ids dos cenários em que a decisão se aplica ("Cenário(s) de aplicação" no quadro 05 do roteiro).
+export const novaDecisao = () => ({ uid: uid(), acao: '', cenarios: [], evidencia: '', risco: '', contribuicao: '' });
 const novoCenario = () => ({ premissas: '', publicadas: '', hipoteses: '', traj: {} });
 const novoImpacto = () => ({ clientes: '', demanda: '', ciclo: '', precos: '', resultado: '', cadeias: {} });
 
@@ -48,6 +49,7 @@ export function casoVazio() {
     decisoes: [novaDecisao(), novaDecisao(), novaDecisao()],
     sintese: '',
     slides: { textos: {} },
+    entrega: { formato: '' },   // último formato de entrega aberto: 'slides' ou 'relatorio'
   };
 }
 
@@ -56,12 +58,12 @@ export function normalizar(c) {
   const v = casoVazio();
   if (!c || typeof c !== 'object') return v;
   const out = { ...v, ...c };
-  for (const k of ['ident', 'diag', 'consultas', 'simulador', 'slides', 'edicoes']) out[k] = { ...v[k], ...(c[k] || {}) };
+  for (const k of ['ident', 'diag', 'consultas', 'simulador', 'slides', 'edicoes', 'entrega']) out[k] = { ...v[k], ...(c[k] || {}) };
   out.edicoes.mantida = { ...(c.edicoes?.mantida || {}) };
   out.simulador.sens = { ...(c.simulador?.sens || {}) };
   out.slides.textos = { ...(c.slides?.textos || {}) };
   out.variaveis = (Array.isArray(c.variaveis) && c.variaveis.length ? c.variaveis : v.variaveis).map(x => ({ ...novaVariavel(), ...x }));
-  out.decisoes = (Array.isArray(c.decisoes) && c.decisoes.length ? c.decisoes : v.decisoes).map(x => ({ ...novaDecisao(), ...x }));
+  out.decisoes = (Array.isArray(c.decisoes) && c.decisoes.length ? c.decisoes : v.decisoes).map(x => ({ ...novaDecisao(), ...x, cenarios: CENARIOS.map(s => s.id).filter(id => Array.isArray(x.cenarios) && x.cenarios.includes(id)) }));
   for (const s of CENARIOS) {
     out.cenarios[s.id] = { ...novoCenario(), ...(c.cenarios?.[s.id] || {}) };
     out.cenarios[s.id].traj = { ...(c.cenarios?.[s.id]?.traj || {}) };
@@ -96,6 +98,13 @@ export function mesesHorizonte(ident) {
 }
 
 const MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'maio', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+// Nomes dos cenários em que uma decisão se aplica, em texto corrido: "Base e adverso".
+export function cenariosTxt(ids) {
+  const n = CENARIOS.filter(s => (ids || []).includes(s.id)).map(s => s.curto.toLowerCase());
+  if (!n.length) return '';
+  const t = n.length === 1 ? n[0] : `${n.slice(0, -1).join(', ')} e ${n[n.length - 1]}`;
+  return t[0].toUpperCase() + t.slice(1);
+}
 export const mesTxt = ym => { const [a, m] = (ym || '').split('-').map(Number); return a && m ? `${MESES[m - 1]} ${a}` : '—'; };
 export const horizonteTxt = ident => `${mesTxt(ident.inicio)} a ${mesTxt(ident.fim)}`;
 
@@ -181,8 +190,8 @@ export function validar(caso) {
   const cadeiasOk = CENARIOS.every(s => vars.length > 0 && vars.some(v => tem(caso.impactos[s.id].cadeias[v.uid]?.cliente) && tem(caso.impactos[s.id].cadeias[v.uid]?.vendas)));
   add(4, 'cadeia', 'Fundamentação variável → efeito no cliente → efeito nas vendas em cada cenário', cadeiasOk);
 
-  const decOk = caso.decisoes.filter(d => tem(d.acao) && tem(d.evidencia) && tem(d.risco) && tem(d.contribuicao));
-  add(5, 'decisoes', 'Pelo menos três decisões comerciais completas e justificadas', decOk.length >= 3, `${decOk.length} de 3`);
+  const decOk = caso.decisoes.filter(d => tem(d.acao) && d.cenarios?.length > 0 && tem(d.evidencia) && tem(d.risco) && tem(d.contribuicao));
+  add(5, 'decisoes', 'Pelo menos três decisões comerciais completas, com cenário de aplicação e justificativa', decOk.length >= 3, `${decOk.length} de 3`);
   add(5, 'sintese', 'Síntese executiva redigida', tem(caso.sintese));
 
   return itens;

@@ -352,6 +352,8 @@ export const fmt = (n, casas = 2) => (n === null || n === undefined || Number.is
   : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
 // Formata um valor com a sua unidade no padrão brasileiro: 13,25% a.a.; R$ 5,05/US$; US$ 80,00 bilhões.
+// Concordância de número: plural(1, 'bloco', 'blocos') → "1 bloco"; plural(2, 'bloco', 'blocos') → "2 blocos".
+export const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 export function comUnidade(n, unidade = '', casas = 2) {
   const v = fmt(n, casas), u = String(unidade || '').trim();
   if (!u) return v;

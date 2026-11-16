@@ -522,11 +522,14 @@ function slide4(ctx) {
 }
 
 // ---------- Slide 5: decisões ----------
+export const notaDecisoesExtras = n => (n === 1 ? '+1 decisão disponível no relatório completo' : `+${n} decisões disponíveis no relatório completo`);
 function slide5(ctx) {
   const { caso, c, txt, cartao, rotulo } = ctx;
   const m = moldura(ctx, 5, `elaboração do autor com base em ${FONTE_FOCUS()} e ${FONTE_IPEA()}.`);
   const { els, X0, X1, Y0, Y1 } = m;
-  const gap = 0.2, hS = 1.12, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0 - hS - 0.16;
+  // O slide traz as três primeiras decisões; as demais ficam no relatório, e uma nota avisa quantas são.
+  const extras = caso.decisoes.slice(3).filter(d => limpo(d.acao)).length, hNota = extras ? 0.24 : 0;
+  const gap = 0.2, hS = 1.12, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0 - hS - 0.16 - hNota;
   const dec = caso.decisoes.slice(0, 3);
   while (dec.length < 3) dec.push({ uid: `vazio${dec.length}`, acao: '', evidencia: '', risco: '', contribuicao: '' });
   dec.forEach((d, i) => {
@@ -545,6 +548,7 @@ function slide5(ctx) {
     });
   });
   const yS = Y1 - hS;
+  if (extras) els.push(TX(X0, Y0 + hC + 0.05, X1 - X0, 0.22, notaDecisoesExtras(extras), { max: 9, min: 7, color: c.suave, align: 'right', valign: 'middle' }));
   els.push(R(X0, yS, X1 - X0, hS, { fill: c.primaria, r: ctx.raio }));
   els.push(TX(X0 + 0.25, yS + 0.1, X1 - X0 - 0.5, 0.24, P('SÍNTESE EXECUTIVA', { bold: true }), { max: 9, min: 7, color: misturar(c.sobrePrimaria, c.primaria, 0.2), valign: 'middle' }));
   els.push(TX(X0 + 0.25, yS + 0.36, X1 - X0 - 0.5, hS - 0.46, txt(5, 's5.sintese', 'Síntese executiva', caso.sintese), { max: 12, min: 7.5, color: c.sobrePrimaria }));
@@ -576,7 +580,7 @@ export function construir(caso, tema) {
       if (r.cortado) cortes++;
     }
     const rot = paginas[i].rotulo;
-    if (cortes) alertas.push({ slide: paginas[i].n, tipo: 'corte', texto: `${rot}: ${cortes} bloco(s) de texto não coube(ram) e foi(ram) cortado(s). Resuma o texto do slide.` });
+    if (cortes) alertas.push({ slide: paginas[i].n, tipo: 'corte', texto: `${rot}: ${cortes === 1 ? '1 bloco de texto não coube e foi cortado' : `${cortes} blocos de texto não couberam e foram cortados`}. Resuma o texto do slide.` });
     else if (menor < 8.5) alertas.push({ slide: paginas[i].n, tipo: 'fonte', texto: `${rot}: há texto em corpo ${fmt(menor, 1)} pt, difícil de ler em projeção. Considere resumir.` });
   });
   return { slides, paginas, blocos: ctx.blocos, alertas };
@@ -672,7 +676,7 @@ export async function exportarPptx(caso, tema, notas = []) {
     const nota = notas[paginas[i].n - 1];
     if (nota) sl.addNotes(nota);
   });
-  const nome = `Caso2_${(caso.ident.empresa || 'cenarios').normalize('NFD').replace(/[^\w]+/g, '_').slice(0, 40)}.pptx`;
+  const nome = `Caso2_${(caso.ident.empresa || 'cenarios').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'cenarios'}.pptx`;
   await pptx.writeFile({ fileName: nome });
   return nome;
 }

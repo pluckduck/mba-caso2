@@ -1,6 +1,6 @@
 // Explorador dos dados de apoio: Relatório Focus (BCB) e Carta de Conjuntura (Ipea).
 import { h, botao, selo, faisca, barrasGrupos, linhas } from './ui.js';
-import { FOCUS, IPEA, fmt, valorIpea } from './refdata.js';
+import { FOCUS, IPEA, fmt, plural, valorIpea } from './refdata.js';
 import { evidenciaFocus, evidenciaIpea } from './modelo.js';
 import { dataCompleta } from './edicoes.js';
 
@@ -19,7 +19,7 @@ function tabelaFocus(tipo, aoUsar) {
           if (!c) return h('td', { class: 'vazio' }, '—');
           const [seta, nome] = SETAS[c.comp];
           const conteudo = [
-            h('div', { class: 'cel-topo' }, h('strong', {}, fmt(c.hoje, l.casas)), h('span', { class: `tend ${c.comp}`, title: `${nome} há ${c.sem} semana(s)` }, `${seta} ${c.sem}`)),
+            h('div', { class: 'cel-topo' }, h('strong', {}, fmt(c.hoje, l.casas)), h('span', { class: `tend ${c.comp}`, title: `${nome} há ${plural(c.sem, 'semana', 'semanas')}` }, `${seta} ${c.sem}`)),
             h('div', { class: 'cel-base' }, faisca([c.h4, c.h1, c.hoje]), h('span', { class: 'antes' }, `4 sem.: ${fmt(c.h4, l.casas)}`)),
           ];
           return h('td', {}, aoUsar

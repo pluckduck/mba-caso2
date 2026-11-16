@@ -1,11 +1,12 @@
 // Aplicativo guiado do Estudo de Caso 2 — Cenários Econômicos e Estratégias de Vendas.
 import * as api from './api.js';
 import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } from './ui.js';
-import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
+import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, plural, comUnidade } from './refdata.js';
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste, luminancia, misturar } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
   horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea, quadro, SETA } from './modelo.js';
 import { construir, exportarPptx, notasApresentador, renderHTML, paginaDoSlide, TITULOS } from './slides.js';
+import { montarRelatorio, relatorioHTML, exportarDocx, nomeDoArquivo } from './relatorio.js';
 import { explorador } from './explorador.js';
 import * as ed from './edicoes.js';
 
@@ -170,9 +171,9 @@ function cartaoEdicoes() {
 const ROTAS = [
   { id: 'painel', titulo: 'Painel', icone: '◎' },
   ...ETAPAS.map(e => ({ id: `etapa/${e.n}`, titulo: `${e.n}. ${e.titulo}`, etapa: e.n })),
-  { id: 'slides', titulo: 'Slides da entrega', icone: '▣', separador: true },
+  { id: 'entrega', titulo: 'Entrega: slides ou relatório', icone: '▣', separador: true, filhas: ['slides', 'relatorio'] },
   { id: 'dados', titulo: 'Dados: Focus e Ipea', icone: '≡' },
-  { id: 'tema', titulo: 'Tema visual', icone: '◐' },
+  { id: 'tema', titulo: 'Tema visual dos slides', icone: '◐' },
   { id: 'fontes', titulo: 'Fontes de consulta', icone: '↗' },
 ];
 const rotaAtual = () => (location.hash.replace(/^#\/?/, '') || 'painel');
@@ -186,13 +187,14 @@ function atualizarNav() {
   const rotas = estado.admin ? [...ROTAS, { id: 'turma', titulo: 'Admin', icone: '☷', separador: true }] : ROTAS;
   nav.replaceChildren(...rotas.map(r => {
     const p = r.etapa ? prog.porEtapa[r.etapa] : null;
-    return h('a', { href: `#/${r.id}`, class: `nav-item ${atual === r.id ? 'ativo' : ''} ${r.separador ? 'separador' : ''}`, 'aria-current': atual === r.id ? 'page' : null },
+    const ativo = atual === r.id || Boolean(r.filhas?.includes(atual));
+    return h('a', { href: `#/${r.id}`, class: `nav-item ${ativo ? 'ativo' : ''} ${r.separador ? 'separador' : ''}`, 'aria-current': ativo ? 'page' : null },
       h('span', { class: `nav-ico ${p && p.ok === p.total ? 'feito' : ''}` }, p ? (p.ok === p.total ? '✓' : String(r.etapa)) : r.icone),
       h('span', { class: 'nav-txt' }, r.etapa ? r.titulo.replace(/^\d\.\s/, '') : r.titulo),
       p ? h('span', { class: 'nav-prog' }, `${p.ok}/${p.total}`) : null);
   }));
   const pct = document.getElementById('nav-pct');
-  if (pct) pct.replaceChildren(anel(prog.pct, 56), h('div', {}, h('strong', {}, 'Entrega'), h('span', {}, `${prog.ok} de ${prog.total} itens`)));
+  if (pct) pct.replaceChildren(anel(prog.pct, 56), h('div', {}, h('strong', {}, 'Roteiro'), h('span', {}, `${prog.ok} de ${prog.total} itens`)));
 }
 
 function montarCasca() {
@@ -221,7 +223,7 @@ function desenharRota(manterRolagem = false) {
   let vista;
   if (r.startsWith('etapa/')) vista = ({ 1: etapa1, 2: etapa2, 3: etapa3, 4: etapa4, 5: etapa5 }[Number(r.split('/')[1])] || painel)();
   else if (r === 'turma' && estado.admin) vista = vistaTurma();
-  else vista = ({ painel, slides: vistaSlides, dados: vistaDados, tema: vistaTema, fontes: vistaFontes }[r] || painel)();
+  else vista = ({ painel, entrega: vistaEntrega, slides: vistaSlides, relatorio: vistaRelatorio, dados: vistaDados, tema: vistaTema, fontes: vistaFontes }[r] || painel)();
   main.replaceChildren(vista);
   atualizarNav();
   window.scrollTo(0, manterRolagem ? y : 0);
@@ -242,7 +244,7 @@ function cabecalhoEtapa(n) {
 function rodapeEtapa(n) {
   return h('footer', { class: 'pe-etapa' },
     n > 1 ? botao(`← ${ETAPAS[n - 2].titulo}`, () => ir(`etapa/${n - 1}`), 'fantasma') : botao('← Painel', () => ir('painel'), 'fantasma'),
-    n < 5 ? botao(`${ETAPAS[n].titulo} →`, () => ir(`etapa/${n + 1}`), 'primario') : botao('Gerar os 5 slides →', () => ir('slides'), 'primario'));
+    n < 5 ? botao(`${ETAPAS[n].titulo} →`, () => ir(`etapa/${n + 1}`), 'primario') : botao('Ir para a entrega →', () => ir('entrega'), 'primario'));
 }
 const C = (o) => campo({ aoMudar: mudou, ...o });
 
@@ -262,22 +264,22 @@ function painel() {
         h('h1', {}, caso.ident.empresa ? `Caso: ${caso.ident.empresa}` : 'Cenários econômicos e estratégias de vendas'),
         h('p', { class: 'lead' }, 'Objetivo da atividade: interpretar indicadores macroeconômicos, construir cenários prospectivos e transformar informações econômicas em decisões estratégicas para a gestão comercial, com consulta obrigatória ao Relatório Focus (BCB) e à Carta de Conjuntura (Ipea).'),
         h('div', { class: 'acoes' },
-          botao(proxima ? `Continuar: ${proxima.titulo} →` : 'Revisar os slides →', () => ir(proxima ? `etapa/${proxima.n}` : 'slides'), 'primario'),
-          botao('Ver os 5 slides', () => ir('slides'), 'fantasma'))),
-      h('div', { class: 'heroi-anel' }, anel(prog.pct, 132), h('span', {}, `${prog.ok} de ${prog.total} itens da entrega`))),
+          botao(proxima ? `Continuar: ${proxima.titulo} →` : 'Ir para a entrega →', () => ir(proxima ? `etapa/${proxima.n}` : 'entrega'), 'primario'),
+          botao('Entrega: slides ou relatório', () => ir('entrega'), 'fantasma'))),
+      h('div', { class: 'heroi-anel' }, anel(prog.pct, 132), h('span', {}, `${prog.ok} de ${prog.total} itens do roteiro`))),
 
     h('section', { class: 'cadeia' }, ['Indicador', 'Cenário', 'Impacto no cliente', 'Impacto nas vendas', 'Decisão comercial'].map((t, i) =>
       [h('a', { href: `#/etapa/${[2, 3, 4, 4, 5][i]}`, class: 'elo' }, h('small', {}, `Etapa ${[2, 3, 4, 4, 5][i]}`), t), i < 4 ? h('span', { class: 'seta', 'aria-hidden': 'true' }, '→') : null])),
 
     h('div', { class: 'grade-2' },
       h('section', { class: 'cartao' },
-        h('h2', {}, 'Pendências da entrega'),
-        prog.ok === prog.total ? h('p', { class: 'ok-msg' }, 'Todos os itens do roteiro foram atendidos. Revise os slides e exporte a apresentação.') :
+        h('h2', {}, 'Pendências do roteiro'),
+        prog.ok === prog.total ? h('p', { class: 'ok-msg' }, 'Todos os itens do roteiro foram atendidos. Abra a entrega e gere os slides ou o relatório.') :
           h('ul', { class: 'pendencias' }, ETAPAS.map(e => { const pend = itens.filter(i => i.etapa === e.n && !i.ok); return pend.length ? h('li', {}, h('a', { href: `#/etapa/${e.n}` }, `${e.n}. ${e.titulo}`), h('ul', {}, pend.map(p => h('li', {}, p.texto, p.detalhe ? h('em', {}, ` (${p.detalhe})`) : null)))) : null; }))),
       h('section', { class: 'cartao' },
         h('h2', {}, 'Critérios de avaliação'),
         h('ol', { class: 'lista-criterios' }, ['Qualidade da pesquisa', 'Interpretação dos indicadores', 'Coerência dos cenários', 'Relação com a realidade comercial', 'Fundamentação das decisões'].map(t => h('li', {}, t))),
-        h('p', { class: 'ajuda' }, 'Entrega: apresentação de até cinco slides, com identificação das fontes, datas e períodos de referência dos indicadores utilizados.'))),
+        h('p', { class: 'ajuda' }, 'Entrega: apresentação de até cinco slides, com identificação das fontes, datas e períodos de referência dos indicadores utilizados. O aplicativo também gera o relatório com os quadros 01 a 05 do roteiro.'))),
 
     h('section', { class: 'cartao' },
       h('div', { class: 'cab-linha' }, h('h2', {}, 'Expectativas de mercado em destaque'), h('a', { href: '#/dados' }, 'Explorar todos os dados →')),
@@ -688,9 +690,12 @@ function etapa5() {
   return h('div', { class: 'vista' }, cabecalhoEtapa(5),
     h('p', { class: 'lead' }, 'Proponha no mínimo três decisões comerciais fundamentadas nos cenários (segmentação de clientes, preços, condições de pagamento, prospecção, gestão da carteira, metas ou preservação de margens) e explique como cada uma reduz riscos ou aproveita oportunidades.'),
     c.decisoes.map((d, i) => h('section', { class: 'cartao' },
-      h('div', { class: 'cab-linha' }, h('h3', {}, `Decisão ${i + 1}`, i > 2 ? h('small', {}, ' (não aparece no slide 5, que traz as três primeiras)') : null),
+      h('div', { class: 'cab-linha' }, h('h3', {}, `Decisão ${i + 1}`, i > 2 ? h('small', {}, ' (aparece só no relatório; o slide 5 traz as três primeiras)') : null),
         c.decisoes.length > 3 ? botao('Remover', () => { c.decisoes.splice(i, 1); mudou(); redesenhar(); }, 'fantasma pequeno') : null),
       C({ rotulo: 'Ação comercial proposta', obj: d, chave: 'acao', linhas: 2 }),
+      h('fieldset', { class: 'marcas' }, h('legend', {}, 'Cenário(s) de aplicação'),
+        h('div', { class: 'marcas-opcoes' }, CENARIOS.map(s => h('label', {}, h('input', { type: 'checkbox', checked: d.cenarios.includes(s.id), onchange: e => { d.cenarios = CENARIOS.map(x => x.id).filter(id => (id === s.id ? e.target.checked : d.cenarios.includes(id))); mudou(); } }), s.curto))),
+        h('p', { class: 'ajuda' }, 'Marque em quais cenários a decisão vale. Vai para o quadro 05 do relatório.')),
       h('div', { class: 'grade-3' },
         C({ rotulo: 'Indicador, evidência e impacto que sustentam a decisão', obj: d, chave: 'evidencia', linhas: 4 }),
         C({ rotulo: 'Risco mitigado ou oportunidade capturada', obj: d, chave: 'risco', linhas: 4 }),
@@ -728,9 +733,16 @@ function apresentar(inicio = 0) {
   tela.requestFullscreen?.().then(() => { tela.dataset.cheia = '1'; mostrar(); }).catch(() => {});
   mostrar(); tela.focus();
 }
+// O tamanho da página impressa depende do que se imprime: slides em 16:9, relatório em A4.
+function paginaImpressao(css) {
+  let st = document.getElementById('pagina-impressao');
+  if (!st) { st = h('style', { id: 'pagina-impressao' }); document.head.append(st); }
+  st.textContent = css;
+}
 function imprimir() {
   const tema = temaAtual();
   document.getElementById('impressao')?.remove();
+  paginaImpressao('@page { size: 1280px 720px; margin: 0; }');
   const area = h('div', { id: 'impressao' }, construir(estado.caso, tema).slides.map(els => h('div', { class: 'pagina' }, renderHTML(els, tema, 1280))));
   document.body.append(area);
   window.print();
@@ -754,9 +766,8 @@ function vistaSlides() {
   const area = h('div', { class: 'slides-lista' });
   const alertasEl = h('div', {});
   const desenharAlertas = alertas => {
-    const pend = validar(c).filter(i => !i.ok).length;
     alertasEl.replaceChildren(
-      pend ? h('div', { class: 'faixa-alerta' }, `Há ${pend} item(ns) do roteiro ainda pendente(s). Os slides são gerados com o que já foi preenchido. `, h('a', { href: '#/painel' }, 'Ver pendências')) : h('div', { class: 'faixa-ok' }, 'Todos os itens do roteiro foram atendidos.'),
+      faixaPendencias('Os slides são gerados com o que já foi preenchido.'),
       ...alertas.map(a => h('div', { class: 'faixa-alerta' }, a.texto)));
   };
   const desenhar = () => {
@@ -790,12 +801,82 @@ function vistaSlides() {
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Entrega final'), h('h1', {}, 'Apresentação em cinco slides'),
       h('p', { class: 'lead' }, 'Os slides são gerados a partir do caso: (1) empresa e características comerciais; (2) indicadores pesquisados no Focus e no Ipea; (3) cenários base, favorável e adverso; (4) impactos sobre clientes e vendas; (5) três decisões comerciais justificadas. Com cinco ou mais variáveis, os slides 2, 3 e 4 se dividem em duas partes para manter o texto legível.')),
     h('div', { class: 'barra-slides' },
+      botao('← Trocar formato', () => ir('entrega'), 'fantasma'),
       h('label', {}, 'Tema ', seletorTema()), botao('Personalizar tema', () => ir('tema'), 'fantasma'),
       h('span', { class: 'espaco' }),
       botao('▶ Apresentar', () => apresentar(0), 'fantasma'),
       botao('Imprimir / salvar em PDF', imprimir, 'fantasma'),
       botao('Exportar PPTX', async e => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Gerando…'; try { const nome = await exportarPptx(c, temaAtual(), notasApresentador(c)); aviso(`Arquivo ${nome} gerado.`); } catch (err) { aviso(err.message, 'erro'); } b.disabled = false; b.textContent = 'Exportar PPTX'; }, 'primario')),
     alertasEl, area);
+}
+
+// ---------- Entrega: escolha do formato e relatório ----------
+function faixaPendencias(complemento) {
+  const pend = validar(estado.caso).filter(i => !i.ok).length;
+  return pend
+    ? h('div', { class: 'faixa-alerta' }, `${pend === 1 ? 'Há 1 item do roteiro ainda pendente' : `Há ${pend} itens do roteiro ainda pendentes`}. ${complemento} `, h('a', { href: '#/painel' }, 'Ver pendências'))
+    : h('div', { class: 'faixa-ok' }, 'Todos os itens do roteiro foram atendidos.');
+}
+const FORMATOS = { slides: 'slides', relatorio: 'relatório' };
+function abrirFormato(f) {
+  const c = estado.caso;
+  if (c.entrega.formato !== f) { c.entrega.formato = f; mudou(); }
+  ir(f);
+}
+function vistaEntrega() {
+  const c = estado.caso;
+  const miniSlide = h('div', { class: 'mini slide', 'aria-hidden': 'true' }, h('div', { class: 'mini-faixa' }),
+    h('div', { class: 'mini-colunas' }, [0, 1, 2].map(() => h('div', {}, h('i', {}), h('i', {}), h('i', {})))));
+  const miniDoc = h('div', { class: 'mini doc', 'aria-hidden': 'true' }, h('div', { class: 'mini-folha' }, h('b', {}), h('div', { class: 'mini-cab' }),
+    [2, 3, 3, 3].map(n => h('div', { class: 'mini-linha' }, h('span', {}, h('b', {})), h('div', {}, Array.from({ length: n }, () => h('i', {})))))));
+  const cartao = (mini, titulo, resumo, pontos, nota, rotulo, formato) => h('section', { class: 'cartao formato' }, mini,
+    h('div', {}, h('h2', {}, titulo), h('p', { class: 'ajuda' }, resumo)),
+    h('ul', {}, pontos.map(p => h('li', {}, p))),
+    h('p', { class: 'formato-nota' }, nota),
+    h('div', { class: 'acoes' }, botao(rotulo, () => abrirFormato(formato), 'primario')));
+  return h('div', { class: 'vista' },
+    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Entrega final'), h('h1', {}, 'Como você quer entregar o caso?'),
+      h('p', { class: 'lead' }, 'O caso preenchido nas cinco etapas é o mesmo. Escolha o formato de saída; você pode gerar os dois e trocar quando quiser, sem perder nada.')),
+    faixaPendencias('Os dois formatos são gerados com o que já foi preenchido.'),
+    h('div', { class: 'formatos' },
+      cartao(miniSlide, 'Apresentação em slides', 'Para apresentar à turma: o caso resumido em cinco slides.',
+        ['Texto resumido para caber no slide; você ajusta slide a slide', 'Com cinco ou mais variáveis, os slides 2, 3 e 4 se dividem em partes', 'Dez temas visuais, com cores e elementos personalizáveis', 'Sai em PowerPoint (PPTX) ou em PDF'],
+        'No roteiro: seção 5, “apresentação de até cinco slides”.', 'Abrir os slides →', 'slides'),
+      cartao(miniDoc, 'Relatório', 'Para entregar por escrito: os cinco quadros do roteiro, de 01 a 05.',
+        ['Texto completo, como você escreveu: nada é cortado nem resumido', 'Qualquer número de variáveis e de decisões; o documento só ganha páginas', 'Mesmo formato de tabelas do material da disciplina, sem tema visual', 'Sai em Word (editável) ou em PDF'],
+        'No roteiro: quadros “Análise de cenários e decisões comerciais”.', 'Abrir o relatório →', 'relatorio')),
+    FORMATOS[c.entrega.formato] ? h('p', { class: 'ajuda' }, `Último formato aberto neste caso: ${FORMATOS[c.entrega.formato]}.`) : null);
+}
+function imprimirRelatorio() {
+  document.getElementById('impressao')?.remove();
+  paginaImpressao('@page { size: A4 portrait; margin: 16mm 17mm; }');
+  document.body.append(h('div', { id: 'impressao', class: 'rel-impressao' }, relatorioHTML(montarRelatorio(estado.caso))));
+  // O navegador sugere o título da página como nome do PDF.
+  const titulo = document.title;
+  document.title = nomeDoArquivo(estado.caso, 'pdf').replace(/\.pdf$/, '');
+  window.addEventListener('afterprint', () => { document.title = titulo; }, { once: true });
+  window.print();
+}
+function vistaRelatorio() {
+  const c = estado.caso, prog = progresso(validar(c));
+  const NOMES = ['Diagnóstico do negócio', 'Evidências econômicas', 'Arquitetura de cenários', 'Impactos comerciais', 'Recomendações e síntese'];
+  const indice = h('aside', { class: 'cartao rel-indice' }, h('h2', {}, 'Seções do relatório'),
+    h('p', { class: 'ajuda' }, 'O relatório usa o texto completo das etapas. Para mudar algo, edite na etapa; o documento se atualiza sozinho.'),
+    h('ul', {}, ETAPAS.map(e => { const p = prog.porEtapa[e.n], ok = p.ok === p.total; return h('li', {},
+      h('strong', {}, `${String(e.n).padStart(2, '0')} · ${NOMES[e.n - 1]}`),
+      h('span', { class: ok ? 'completo' : '' }, ok ? 'completo' : `${p.ok} de ${plural(p.total, 'item', 'itens')}`),
+      h('a', { href: `#/etapa/${e.n}` }, `Editar na etapa ${e.n}`)); })),
+    h('p', { class: 'ajuda' }, 'Campos ainda vazios saem como linhas em branco, iguais às do modelo da disciplina.'));
+  return h('div', { class: 'vista larga' },
+    h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Entrega final · relatório'), h('h1', {}, 'Relatório do caso'),
+      h('p', { class: 'lead' }, 'Os cinco quadros do roteiro, de 01 a 05, com o texto completo que você escreveu, os números das fontes e as referências. Sem limite de espaço: o documento ganha páginas conforme o conteúdo.')),
+    h('div', { class: 'barra-slides' },
+      botao('← Trocar formato', () => ir('entrega'), 'fantasma'),
+      h('span', { class: 'espaco' }),
+      botao('Imprimir / salvar em PDF', imprimirRelatorio, 'fantasma'),
+      botao('Baixar em Word (.docx)', () => { try { aviso(`Arquivo ${exportarDocx(c)} gerado.`); } catch (err) { aviso(`Não foi possível gerar o arquivo: ${err.message}`, 'erro'); } }, 'primario')),
+    faixaPendencias('O relatório é gerado com o que já foi preenchido.'),
+    h('div', { class: 'rel-layout' }, indice, h('div', { class: 'rel-rolagem' }, h('div', { class: 'rel-folha' }, relatorioHTML(montarRelatorio(c))))));
 }
 
 // ---------- Dados ----------
@@ -966,7 +1047,7 @@ function haQuanto(iso) {
   if (min < 1) return 'agora';
   if (min < 60) return `há ${min} min`;
   if (min < 1440) return `há ${Math.round(min / 60)} h`;
-  return `há ${Math.round(min / 1440)} dia(s)`;
+  return `há ${plural(Math.round(min / 1440), 'dia', 'dias')}`;
 }
 // Calendário dos relatórios: quando sai cada edição e o que já está carregado no aplicativo.
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
