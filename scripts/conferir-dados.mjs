@@ -100,5 +100,5 @@ for (const ed of carregadas) {
 
 for (const a of avisos) console.log(`aviso  ${a}`);
 for (const e of erros) console.log(`ERRO   ${e}`);
-console.log(`\n${carregadas.length} edições carregadas, ${ipea.reduce((n, e) => n + (e.ipea?.length || 0), 0)} registros do Ipea e ${OBSERVADOS.length} valores observados conferidos: ${erros.length} erro(s), ${avisos.length} aviso(s).`);
+console.log(`\n${carregadas.length} edições carregadas, ${ipea.reduce((n, e) => n + (e.ipea?.length || 0), 0)} registros do Ipea e ${OBSERVADOS.length} valores observados conferidos: ${erros.length} ${erros.length === 1 ? 'erro' : 'erros'}, ${avisos.length} ${avisos.length === 1 ? 'aviso' : 'avisos'}.`);
 process.exit(erros.length ? 1 : 0);
