@@ -831,6 +831,7 @@ function imprimir() {
   const area = h('div', { id: 'impressao' }, construir(estado.caso, tema).slides.map(els => h('div', { class: 'pagina' }, renderHTML(els, tema, 1280))));
   document.body.append(area);
   window.print();
+  pedirAvaliacao('pdf-slides');
 }
 function seletorTema() {
   const salvos = temasSalvos();
@@ -891,7 +892,7 @@ function vistaSlides() {
       h('span', { class: 'espaco' }),
       botao('▶ Apresentar', () => apresentar(0), 'fantasma'),
       botao('Imprimir / salvar em PDF', imprimir, 'fantasma'),
-      botao('Exportar PPTX', async e => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Gerando…'; try { const nome = await exportarPptx(c, temaAtual(), notasApresentador(c)); aviso(`Arquivo ${nome} gerado.`); } catch (err) { aviso(err.message, 'erro'); } b.disabled = false; b.textContent = 'Exportar PPTX'; }, 'primario')),
+      botao('Exportar PPTX', async e => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Gerando…'; try { const nome = await exportarPptx(c, temaAtual(), notasApresentador(c)); aviso(`Arquivo ${nome} gerado.`); pedirAvaliacao('pptx'); } catch (err) { aviso(err.message, 'erro'); } b.disabled = false; b.textContent = 'Exportar PPTX'; }, 'primario')),
     alertasEl, area);
 }
 
@@ -941,6 +942,7 @@ function imprimirRelatorio() {
   document.title = nomeDoArquivo(estado.caso, 'pdf').replace(/\.pdf$/, '');
   window.addEventListener('afterprint', () => { document.title = titulo; }, { once: true });
   window.print();
+  pedirAvaliacao('pdf-relatorio');
 }
 function vistaRelatorio() {
   const c = estado.caso, prog = progresso(validar(c));
@@ -959,7 +961,7 @@ function vistaRelatorio() {
       botao('← Trocar formato', () => ir('entrega'), 'fantasma'),
       h('span', { class: 'espaco' }),
       botao('Imprimir / salvar em PDF', imprimirRelatorio, 'fantasma'),
-      botao('Baixar em Word (.docx)', () => { try { aviso(`Arquivo ${exportarDocx(c)} gerado.`); } catch (err) { aviso(`Não foi possível gerar o arquivo: ${err.message}`, 'erro'); } }, 'primario')),
+      botao('Baixar em Word (.docx)', () => { try { aviso(`Arquivo ${exportarDocx(c)} gerado.`); pedirAvaliacao('docx'); } catch (err) { aviso(`Não foi possível gerar o arquivo: ${err.message}`, 'erro'); } }, 'primario')),
     faixaPendencias('O relatório é gerado com o que já foi preenchido.'),
     h('div', { class: 'rel-layout' }, indice, h('div', { class: 'rel-rolagem' }, h('div', { class: 'rel-folha' }, relatorioHTML(montarRelatorio(c))))));
 }
@@ -1114,6 +1116,79 @@ function vistaFontes() {
       h('ul', { class: 'fontes' }, FONTES_CONSULTA.map(f => h('li', {}, h('a', { href: f.url, target: '_blank', rel: 'noopener' }, `${f.n}. ${f.nome} ↗`), f.prioritaria ? selo('prioritária', 'proj') : null, h('span', {}, f.desc))))));
 }
 
+// ---------- Avaliação do aplicativo ----------
+// Depois da primeira exportação (PPTX, Word ou PDF), pede uma nota de 0 a 5 estrelas e um comentário opcional.
+// Quem já avaliou não é perguntado de novo; quem escolhe "Agora não" só volta a ver o pedido na próxima sessão.
+const SS_ADIADA = 'caso2.avaliacaoAdiada';
+let consultaAvaliacao = null;
+async function pedirAvaliacao(origem) {
+  if (!api.remoto || estado.avaliou) return;
+  try { if (sessionStorage.getItem(SS_ADIADA)) return; } catch { /* sem sessionStorage */ }
+  if (document.querySelector('.modal-fundo')) return;
+  consultaAvaliacao ||= api.jaAvaliou();
+  if (await consultaAvaliacao) { estado.avaliou = true; return; }
+  setTimeout(() => abrirAvaliacao(origem), 900);
+}
+function abrirAvaliacao(origem) {
+  if (estado.avaliou || document.querySelector('.modal-fundo')) return;
+  const d = { nota: 0, comentario: '' };
+  const textos = ['Nenhuma estrela', 'Muito ruim', 'Ruim', 'Razoável', 'Bom', 'Excelente'];
+  const legenda = h('span', { class: 'aval-legenda' });
+  const estrelas = [1, 2, 3, 4, 5].map(n => h('button', { type: 'button', class: 'aval-estrela', 'aria-label': n === 1 ? '1 estrela' : `${n} estrelas`,
+    onclick: () => { d.nota = d.nota === n ? 0 : n; pintar(d.nota); }, onmouseenter: () => pintar(n), onfocus: () => pintar(n) }, '★'));
+  const grupo = h('div', { class: 'aval-estrelas', onmouseleave: () => pintar(d.nota) }, estrelas);
+  const pintar = v => {
+    estrelas.forEach((b, i) => { b.classList.toggle('acesa', i < v); b.setAttribute('aria-pressed', String(i < d.nota)); });
+    legenda.textContent = `${v} de 5 · ${textos[v]}`;
+  };
+  pintar(0);
+  const erro = h('p', { class: 'erro', role: 'alert' });
+  const enviar = async e => {
+    const b = e.currentTarget; b.disabled = true; erro.textContent = '';
+    try {
+      await api.enviarAvaliacao({ nota: d.nota, comentario: d.comentario.trim(), origem });
+      estado.avaliou = true; fechar(); aviso('Obrigado pela avaliação!');
+    } catch (err) { erro.textContent = `Não foi possível enviar: ${err.message}`; b.disabled = false; }
+  };
+  const adiar = () => { try { sessionStorage.setItem(SS_ADIADA, '1'); } catch { /* ignora */ } fechar(); };
+  const fechar = modal('Sua opinião sobre o aplicativo', h('div', { class: 'aval' },
+    h('p', {}, 'Que bom que você chegou à entrega! Em uma escala de 0 a 5 estrelas, o que achou do aplicativo?'),
+    h('div', { class: 'aval-linha' }, grupo, legenda),
+    h('p', { class: 'ajuda' }, 'Clique na mesma estrela de novo para voltar a zero.'),
+    campo({ rotulo: 'Quer comentar alguma coisa? (opcional)', obj: d, chave: 'comentario', linhas: 4, placeholder: 'O que ajudou, o que atrapalhou, o que você mudaria…', atributos: { maxlength: 2000 } }),
+    erro,
+    h('div', { class: 'acoes aval-acoes' }, botao('Agora não', adiar, 'fantasma'), botao('Enviar avaliação', enviar, 'primario'))));
+}
+function painelAvaliacoesEl() {
+  const el = h('section', { class: 'cartao' }, h('h2', {}, 'Avaliações do aplicativo'), h('p', { class: 'carregando' }, 'Carregando…'));
+  const ROT_ORIGEM = { pptx: 'após exportar o PPTX', docx: 'após baixar o Word', 'pdf-slides': 'após imprimir os slides', 'pdf-relatorio': 'após imprimir o relatório' };
+  const estrelasTxt = n => h('span', { class: 'aval-mini', 'aria-label': `${n} de 5` }, h('span', { class: 'acesa' }, '★'.repeat(n)), '★'.repeat(5 - n));
+  api.painelAvaliacoes().then(lista => {
+    const n = lista.length;
+    const media = n ? lista.reduce((a, l) => a + l.nota, 0) / n : null;
+    const comComentario = lista.filter(l => (l.comentario || '').trim());
+    const kpi = (rot, val, sub) => h('div', { class: 'kpi' }, h('span', { class: 'kpi-nome' }, rot), h('div', { class: 'kpi-vals' }, h('div', {}, h('strong', {}, val), sub ? h('small', {}, sub) : null)));
+    const dist = [5, 4, 3, 2, 1, 0].map(v => ({ rotulo: v === 1 ? '1 estrela' : `${v} estrelas`, valor: lista.filter(l => l.nota === v).length, cor: '#C98A06' }));
+    el.replaceChildren(h('h2', {}, 'Avaliações do aplicativo'),
+      h('p', { class: 'ajuda' }, 'Pedidas uma vez a cada participante, logo depois da primeira exportação da entrega (PPTX, Word ou PDF). A nota vai de 0 a 5 estrelas; o comentário é opcional.'),
+      n ? [
+        h('div', { class: 'kpis' },
+          kpi('Avaliações recebidas', String(n)),
+          kpi('Nota média', media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }), ' de 5'),
+          kpi('Com comentário', String(comComentario.length), ` de ${n}`)),
+        h('div', { class: 'turma-dist' }, barrasGrupos([{ nome: 'Distribuição das notas (participantes)', itens: dist }], { casas: 0 })),
+        h('div', { class: 'tabela-rolagem' }, h('table', { class: 'tabela' },
+          h('thead', {}, h('tr', {}, ['Participante', 'Nota', 'Comentário', 'Quando'].map(t => h('th', {}, t)))),
+          h('tbody', {}, lista.map(l => h('tr', {},
+            h('td', {}, h('strong', {}, l.nome || '(sem nome)'), h('div', { class: 'nota' }, l.email)),
+            h('td', { class: 'num' }, estrelasTxt(l.nota), h('div', { class: 'nota' }, `${l.nota} de 5`)),
+            h('td', { class: 'aval-comentario' }, (l.comentario || '').trim() || h('span', { class: 'nota' }, 'sem comentário')),
+            h('td', {}, dataHora(l.criado_em), h('div', { class: 'nota' }, ROT_ORIGEM[l.origem] || ''))))))),
+      ] : h('p', {}, 'Nenhuma avaliação recebida ainda.'));
+  }).catch(e => el.replaceChildren(h('h2', {}, 'Avaliações do aplicativo'), h('p', { class: 'erro' }, `Não foi possível carregar: ${e.message}`)));
+  return el;
+}
+
 // ---------- Turma (somente o administrador) ----------
 const ATRIBUTOS_TEMA = Object.keys(TEMAS[0].cores).length + Object.keys(TEMAS[0].fontes).length + Object.keys(TEMAS[0].el).length;
 // Índice de customização: parcela dos atributos do tema (cores, fontes e elementos) alterada em relação ao tema base.
@@ -1229,13 +1304,14 @@ function vistaTurma() {
         kpi('Concluíram 100%', String(comProg.filter(l => l.progresso === 100).length))),
       contas, custom);
   };
-  const carregar = () => api.painelAdmin().then(desenhar).catch(e => corpo.replaceChildren(h('p', { class: 'erro' }, `Não foi possível carregar: ${e.message}`)));
+  const avaliacoes = h('div', {});
+  const carregar = () => { avaliacoes.replaceChildren(painelAvaliacoesEl()); return api.painelAdmin().then(desenhar).catch(e => corpo.replaceChildren(h('p', { class: 'erro' }, `Não foi possível carregar: ${e.message}`))); };
   carregar();
   return h('div', { class: 'vista larga' },
     h('header', { class: 'cab-etapa' }, h('span', { class: 'kicker' }, 'Administração · visível somente para você'), h('h1', {}, 'Admin'),
-      h('p', { class: 'lead' }, 'Quem criou conta, quanto do roteiro já concluiu, quando acessou pela última vez e como personalizou o visual. O conteúdo dos casos dos colegas não é exibido.'),
+      h('p', { class: 'lead' }, 'Quem criou conta, quanto do roteiro já concluiu, quando acessou pela última vez, como personalizou o visual e como avaliou o aplicativo. O conteúdo dos casos dos colegas não é exibido.'),
       h('div', { class: 'acoes' }, botao('Atualizar Progresso da Turma', carregar, 'fantasma'))),
-    corpo, calendarioRelatorios());
+    corpo, avaliacoes, calendarioRelatorios());
 }
 
 // ---------- Acesso ----------

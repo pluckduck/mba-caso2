@@ -442,3 +442,15 @@ h2 .selo { margin-left: .4rem; vertical-align: middle; font-family: var(--f-corp
 .ae-faixa > span { flex: 1 1 380px; }
 .ae-faixa label { display: inline-flex; align-items: center; gap: .45rem; min-height: 40px; font-weight: 400; font-size: .9rem; cursor: pointer; }
 .ae-faixa input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--c-primaria); }
+
+/* Avaliação do aplicativo (pedido após a exportação e painel no Admin) */
+.aval-linha { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; margin: .4rem 0 .1rem; }
+.aval-estrelas { display: flex; gap: .15rem; }
+.aval-estrela { font-size: 2rem; line-height: 1; background: none; border: 0; padding: .1rem .15rem; cursor: pointer; color: var(--c-borda); border-radius: 6px; transition: transform .08s; }
+.aval-estrela:hover { transform: scale(1.12); }
+.aval-estrela:focus-visible { outline: 2px solid var(--c-primaria); outline-offset: 2px; }
+.aval-estrela.acesa { color: #E3A008; }
+.aval-legenda { font-weight: 600; color: var(--c-suave); font-variant-numeric: tabular-nums; }
+.aval-acoes { justify-content: flex-end; margin-top: .6rem; }
+.aval-mini { letter-spacing: .05em; color: var(--c-borda); white-space: nowrap; font-size: 1.05rem; } .aval-mini .acesa { color: #E3A008; }
+.aval-comentario { max-width: 52ch; white-space: pre-wrap; }

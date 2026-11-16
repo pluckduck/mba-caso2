@@ -165,3 +165,23 @@ export async function painelAdmin() {
   const t = await tokenValido();
   return chamar('/rest/v1/rpc/painel_admin', { metodo: 'POST', token: t, corpo: {} });
 }
+
+// ---------- Avaliação do aplicativo ----------
+// Indica se o participante já enviou alguma avaliação (cada um lê só as próprias, pela RLS).
+export async function jaAvaliou() {
+  if (!remoto) return true;
+  try { const t = await tokenValido(); const l = await chamar('/rest/v1/avaliacoes?select=id&limit=1', { token: t }); return Array.isArray(l) && l.length > 0; }
+  catch { return true; }
+}
+export async function enviarAvaliacao({ nota, comentario, origem }) {
+  const t = await tokenValido();
+  await chamar('/rest/v1/avaliacoes', {
+    metodo: 'POST', token: t, corpo: { user_id: sessao.user.id, nota, comentario: comentario || null, origem },
+    cabecalhos: { Prefer: 'return=minimal' },
+  });
+}
+// Todas as avaliações, com nome e e-mail. O servidor recusa quem não é administrador.
+export async function painelAvaliacoes() {
+  const t = await tokenValido();
+  return chamar('/rest/v1/rpc/painel_avaliacoes', { metodo: 'POST', token: t, corpo: {} });
+}
