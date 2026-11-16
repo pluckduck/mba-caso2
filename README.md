@@ -26,6 +26,7 @@ Os dados vêm dos relatórios de apoio da atividade e são organizados em **edi�
 
 - BANCO CENTRAL DO BRASIL. *Focus – Relatório de Mercado*: expectativas de mercado. Brasília: BCB, 23 out. 2026.
 - BANCO CENTRAL DO BRASIL. *Focus – Relatório de Mercado*: expectativas de mercado. Brasília: BCB, 6 nov. 2026.
+- BANCO CENTRAL DO BRASIL. *Focus – Relatório de Mercado*: expectativas de mercado. Brasília: BCB, 13 nov. 2026.
 - SANTOS, Claudio Hamilton Matos dos; AMITRANO, Cláudio Roberto; ARAUJO, Mônica Mora y. Visão geral da conjuntura. *Carta de Conjuntura*, Brasília: Ipea, n. 71, Nota de Conjuntura 24, 2º trim. 2026.
 
 Cada caso usa uma edição de cada relatório. Casos novos começam na mais recente; casos em andamento ficam na edição em que começaram e recebem um aviso quando sai outra. Cada registro do Ipea traz a página de origem. Os valores devem ser conferidos no documento original antes de serem citados.
