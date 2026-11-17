@@ -45,6 +45,10 @@ O aplicativo só avisa; nada é trocado sem clique do autor. Há aviso, no campo
 
 As regras estão em `site/js/modelo.js` (`origemValor`, `avisosDoValor`, `avisoPublicadas`, `avisosConsultas` e `divergencias`).
 
+### Slide 3 (cenários)
+
+Com até quatro variáveis, os três cartões trazem só texto: premissas e fundamentação formam um único bloco corrido, que divide a altura do cartão conforme o tamanho real de cada texto. Campo vazio não reserva espaço nem mostra o rótulo (e continua como pendência no roteiro). Os valores das variáveis, com a marca P/H, ficam no gráfico comparativo do rodapé, cujas barras partem do zero. Os avisos de espaço da etapa 3 usam esse mesmo bloco: premissas e justificativas dividem o espaço, e o limite informado em cada campo considera o que já está escrito nos outros. Com cinco ou mais variáveis, o slide continua se dividindo: a primeira página usa o mesmo texto corrido e as seguintes trazem a tabela das trajetórias.
+
 ### Texto-modelo
 
 "Listar hipóteses" escreve `[fundamentar]` onde falta a justificativa de um valor. Enquanto esse marcador estiver em qualquer texto do caso (inclusive nas versões resumidas dos slides), o campo fica sinalizado, o roteiro ganha uma pendência e as telas de slides e de relatório avisam. A lista de marcadores está em `MARCADORES` (`site/js/modelo.js`).

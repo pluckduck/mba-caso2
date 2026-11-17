@@ -315,7 +315,7 @@ function CS(o, diretas = [], compostas = []) {
     const acao = direta
       ? botao('Escrever versão curta para o slide', () => { c.slides.textos[key] = t; focoCurta = key; mudou(); redesenhar(); }, 'contorno')
       : h('a', { href: '#/slides' }, 'Resumir este bloco na tela dos slides');
-    return linhaEstado(e, t, { composto: !direta, acao });
+    return linhaEstado(e, t, { composto: !direta || e.compartilhado, acao });
   }, 'ae-vivo');
   let curta = null;
   if (keyCurta) {

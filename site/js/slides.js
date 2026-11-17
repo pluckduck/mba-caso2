@@ -35,7 +35,8 @@ function parasHTML(paras, pt, k) {
   return paras.map((p, i) => {
     const px = (pt * (p.k || 1) / 72) * k;
     const gap = i < paras.length - 1 ? (pt * 0.32 / 72) * k : 0;
-    const st = [`font-size:${px.toFixed(2)}px`, `margin:0 0 ${gap.toFixed(2)}px 0`];
+    const antes = p.antes && i > 0 ? (pt * p.antes / 72) * k : 0;   // respiro antes de um rótulo no meio do texto
+    const st = [`font-size:${px.toFixed(2)}px`, `margin:${antes.toFixed(2)}px 0 ${gap.toFixed(2)}px 0`];
     if (p.bold) st.push('font-weight:700');
     if (p.italic) st.push('font-style:italic');
     if (p.color) st.push(`color:${p.color}`);
@@ -322,7 +323,8 @@ function pagina2(ctx, vars, ini, comConsultas) {
 }
 
 // ---------- Slide 3: cenários ----------
-// Até 4 variáveis: uma página (cartões dos cenários e gráfico). A partir de 5: a primeira página traz premissas e
+// Até 4 variáveis: uma página. Os cartões dos cenários trazem só texto (premissas e fundamentação) e os valores das
+// variáveis, com a marca P/H, ficam no gráfico comparativo. A partir de 5: a primeira página traz premissas e
 // fundamentação; as seguintes, a tabela com a trajetória de todas as variáveis (até 6 por página).
 const FONTES3 = () => `${FONTE_FOCUS()}; ${FONTE_IPEA()}; hipóteses do autor. P = valor publicado nas fontes; H = hipótese do autor.`;
 // Barras comparativas dos cenários: cada barra parte do zero. Valor positivo cresce para a direita do eixo e valor
@@ -339,6 +341,13 @@ function eixoZero(ctx, els, x, y, wMax, h, lo, hi) {
   els.push(R(x + (wMax * (0 - lo)) / (hi - lo) - 0.006, y, 0.012, h, { fill: ctx.c.texto }));
 }
 const corCenario = (c, cor) => (cor === c.fundo ? c.texto : (luminancia(c.superficie) < 0.35 ? cor : misturar(cor, c.texto, 0.25)));
+// Premissas e fundamentação de um cenário em um só bloco de texto corrido: as duas partes dividem a altura do cartão
+// conforme o tamanho real de cada texto, com a mesma letra. Parte vazia não entra (nem o rótulo) e não reserva espaço.
+function textoCenario(ctx, x, y, w, h, premissas, fundamentacao, o) {
+  const rot = (t, antes) => P(t, { bold: true, color: ctx.c.suave, k: 0.85, antes });
+  const paras = [...(premissas ? [rot('PREMISSAS', 0), P(premissas)] : []), ...(fundamentacao.length ? [rot('FUNDAMENTAÇÃO', premissas ? 0.45 : 0), ...fundamentacao.map(l => P(l))] : [])];
+  return TX(x, y, w, h, paras, { color: ctx.c.texto, ...o });
+}
 function paginas3(ctx) {
   const vars = variaveisAtivas(ctx.caso);
   if (vars.length <= 4) return [() => slide3(ctx)];
@@ -347,7 +356,7 @@ function paginas3(ctx) {
   return fns;
 }
 function slide3Premissas(ctx) {
-  const { caso, c, txt, cartao, rotulo } = ctx;
+  const { caso, c, txt, cartao } = ctx;
   const { els, X0, X1, Y0, Y1 } = moldura(ctx, 3, FONTES3());
   const gap = 0.2, wC = (X1 - X0 - 2 * gap) / 3, hC = Y1 - Y0;
   CENARIOS.forEach((s, i) => {
@@ -356,14 +365,11 @@ function slide3Premissas(ctx) {
     els.push(R(x, Y0, wC, 0.46, { fill: cor, r: ctx.raio }));
     if (ctx.raio > 0) els.push(R(x, Y0 + 0.23, wC, 0.23, { fill: cor }));
     els.push(TX(x + 0.2, Y0, wC - 0.4, 0.46, P(s.nome, { bold: true }), { max: 14, min: 10, fonte: 'titulo', color: sobre(cor), valign: 'middle' }));
-    let y = Y0 + 0.62;
-    els.push(rotulo(x + 0.2, y, wC - 0.4, 'Premissas', c.suave));
-    els.push(TX(x + 0.2, y + 0.28, wC - 0.4, 1.95, txt(3, `s3.premissas.${s.id}`, `${s.nome}: premissas`, cen.premissas), { max: 12, min: 8, color: c.texto }));
-    y += 2.4;
-    els.push(rotulo(x + 0.2, y, wC - 0.4, 'Fundamentação', c.suave));
+    const y = Y0 + 0.62;
+    const prem = txt(3, `s3.premissas.${s.id}`, `${s.nome}: premissas`, cen.premissas);
     const padrao = [limpo(cen.publicadas) && `Projeções publicadas: ${limpo(cen.publicadas)}`, limpo(cen.hipoteses) && `Hipóteses do autor: ${limpo(cen.hipoteses)}`].filter(Boolean).join('\n');
     const fund = txt(3, `s3.fund.${s.id}`, `${s.nome}: fundamentação`, padrao);
-    els.push(TX(x + 0.2, y + 0.28, wC - 0.4, Y0 + hC - 0.16 - (y + 0.28), fund.split('\n').map(l => P(l)), { max: 11, min: 7.5, color: c.texto }));
+    els.push(textoCenario(ctx, x + 0.2, y, wC - 0.4, Y0 + hC - 0.16 - y, prem, fund.split('\n').filter(l => l.trim()), { max: 12, min: 7.5 }));
   });
   return els;
 }
@@ -403,7 +409,7 @@ function slide3Tabela(ctx, vars) {
   return els;
 }
 function slide3(ctx) {
-  const { caso, c, txt, cartao, rotulo } = ctx;
+  const { caso, c, txt, cartao } = ctx;
   const m = moldura(ctx, 3, FONTES3());
   const { els, X0, X1, Y0, Y1 } = m;
   const vars = variaveisAtivas(caso).slice(0, 4);
@@ -414,31 +420,18 @@ function slide3(ctx) {
     els.push(R(x, Y0, wC, 0.46, { fill: cor, r: ctx.raio }));
     if (ctx.raio > 0) els.push(R(x, Y0 + 0.23, wC, 0.23, { fill: cor }));
     els.push(TX(x + 0.2, Y0, wC - 0.4, 0.46, P(s.nome, { bold: true }), { max: 14, min: 10, fonte: 'titulo', color: sobre(cor), valign: 'middle' }));
-    let y = Y0 + 0.56;
-    els.push(rotulo(x + 0.2, y, wC - 0.4, 'Premissas', c.suave));
-    els.push(TX(x + 0.2, y + 0.26, wC - 0.4, 0.92, txt(3, `s3.premissas.${s.id}`, `${s.nome}: premissas`, cen.premissas), { max: 11, min: 7.5, color: c.texto }));
-    y += 1.26;
-    const hLinha = Math.min(0.3, 1.1 / Math.max(vars.length, 1));
-    vars.forEach((v, j) => {
-      const yy = y + j * hLinha, t = cen.traj[v.uid] || {};
-      const cls = origemValor(t);
-      const n = numSimples(t.valor);
-      els.push(LN(x + 0.2, yy, wC - 0.4, 0, { color: c.borda, lw: 0.5 }));
-      els.push(TX(x + 0.2, yy, wC - 2.0, hLinha, v.nome, { max: 10, min: 7, color: c.texto, valign: 'middle' }));
-      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls && cls.tipo !== '?' ? `  (${cls.tipo})` : ''}`;
-      els.push(TX(x + wC - 1.85, yy, 1.65, hLinha, P(valor, { bold: true }), { max: 10.5, min: 7, color: cor === c.fundo ? c.texto : (luminancia(c.superficie) < 0.35 ? cor : misturar(cor, c.texto, 0.25)), align: 'right', valign: 'middle' }));
-    });
-    y += Math.max(vars.length, 1) * hLinha + 0.08;
-    const resto = Y0 + hC - 0.14 - y;
-    if (resto > 0.45) {
-      els.push(rotulo(x + 0.2, y, wC - 0.4, 'Fundamentação', c.suave));
-      const just = vars.map(v => { const j = limpo(cen.traj[v.uid]?.justificativa); return j ? `${v.nome}: ${j}` : ''; }).filter(Boolean).join(' ');
-      const padrao = limpo(cen.hipoteses) ? `Hipóteses do autor: ${limpo(cen.hipoteses)}` : just;
-      els.push(TX(x + 0.2, y + 0.25, wC - 0.4, resto - 0.25, txt(3, `s3.fund.${s.id}`, `${s.nome}: fundamentação`, padrao), { max: 9.5, min: 7, color: c.texto }));
-    }
+    const prem = txt(3, `s3.premissas.${s.id}`, `${s.nome}: premissas`, cen.premissas);
+    // Fundamentação: as hipóteses listadas pelo autor ou, sem elas, a justificativa de cada variável (uma por parágrafo).
+    const just = vars.map(v => { const j = limpo(cen.traj[v.uid]?.justificativa); return j ? `${v.nome}: ${j}` : ''; }).filter(Boolean).join('\n');
+    const comHipoteses = Boolean(limpo(cen.hipoteses));
+    const fund = txt(3, `s3.fund.${s.id}`, `${s.nome}: fundamentação`, comHipoteses ? `Hipóteses do autor: ${limpo(cen.hipoteses)}` : just);
+    // Texto das hipóteses e versão resumida do slide ficam em um parágrafo só (é assim que o aviso de espaço das etapas os mede).
+    const umSo = comHipoteses || typeof caso.slides.textos[`s3.fund.${s.id}`] === 'string';
+    const y = Y0 + 0.58;
+    els.push(textoCenario(ctx, x + 0.2, y, wC - 0.4, Y0 + hC - 0.14 - y, prem, fund ? (umSo ? [fund] : fund.split('\n').filter(l => l.trim())) : [], { max: 11, min: 7.5 }));
   });
 
-  // Gráfico comparativo: uma pequena série de barras por variável.
+  // Gráfico comparativo: uma pequena série de barras por variável, com o valor de cada cenário e a marca P/H.
   const yG = Y1 - hG;
   els.push(cartao(X0, yG, X1 - X0, hG));
   if (vars.length) {
@@ -448,15 +441,16 @@ function slide3(ctx) {
       const vals = CENARIOS.map(s => numSimples(caso.cenarios[s.id].traj[v.uid]?.valor));
       const validos = vals.filter(n => n !== null);
       const hi = Math.max(...validos, 0), lo = Math.min(...validos, 0);
+      const wVal = 1.0, wMax = wV - 0.16 - 0.86 - 0.06 - wVal;
       els.push(TX(x + 0.08, yG + 0.08, wV - 0.16, 0.24, P(nomeComUnidade(v), { bold: true }), { max: 9, min: 6.5, color: c.suave, valign: 'middle' }));
       CENARIOS.forEach((s, k) => {
         const yy = yG + 0.38 + k * 0.28, n = vals[k];
         els.push(TX(x + 0.08, yy, 0.82, 0.24, s.curto, { max: 8.5, min: 6.5, color: c.texto, valign: 'middle' }));
-        const wMax = wV - 0.16 - 0.86 - 0.72;
         barraDoZero(ctx, els, x + 0.92, yy + 0.05, wMax, 0.14, n, lo, hi, c[s.id]);
-        els.push(TX(x + 0.92 + wMax + 0.06, yy, 0.66, 0.24, P(n === null ? '—' : fmt(n, 2), { bold: true }), { max: 9, min: 6.5, color: c.texto, valign: 'middle' }));
+        const cls = origemValor(caso.cenarios[s.id].traj[v.uid]);
+        els.push(TX(x + 0.92 + wMax + 0.06, yy, wVal, 0.24, P(n === null ? '—' : `${fmt(n, 2)}${cls && cls.tipo !== '?' ? `  (${cls.tipo})` : ''}`, { bold: true }), { max: 9, min: 6.5, color: c.texto, valign: 'middle' }));
       });
-      eixoZero(ctx, els, x + 0.92, yG + 0.38, wV - 0.16 - 0.86 - 0.72, 3 * 0.28 - 0.04, lo, hi);
+      eixoZero(ctx, els, x + 0.92, yG + 0.38, wMax, 3 * 0.28 - 0.04, lo, hi);
     });
   } else {
     els.push(TX(X0 + 0.2, yG + 0.2, X1 - X0 - 0.4, 0.5, 'Defina as trajetórias das variáveis na etapa 3.', { max: 11, color: c.suave, italic: true }));
@@ -639,6 +633,9 @@ export function construir(caso, tema) {
       const el = elementoDoBloco(els, b.texto);
       if (el) encaixe[b.key] = { slide: paginas[i].n, rotulo: rot, size: el.size, cortado: el.cortado, estado: el.cortado ? 'nao' : el.size < conforto(el) ? 'apertado' : 'ok', el };
     }
+    // Blocos que dividem o mesmo elemento de texto (premissas e fundamentação do slide 3) dividem também o espaço.
+    const daPagina = ctx.blocos.filter(b => b.pag === i && encaixe[b.key]).map(b => encaixe[b.key]);
+    for (const e of daPagina) e.compartilhado = daPagina.filter(o => o.el === e.el).length > 1;
     if (cortes) alertas.push({ slide: paginas[i].n, tipo: 'corte', texto: `${rot}: ${cortes === 1 ? '1 bloco de texto não coube e foi cortado' : `${cortes} blocos de texto não couberam e foram cortados`}. Resuma o texto do slide.` });
     else if (menor < 8.5) alertas.push({ slide: paginas[i].n, tipo: 'fonte', texto: `${rot}: há texto em corpo ${fmt(menor, 1)} pt, difícil de ler em projeção. Considere resumir.` });
   });
@@ -726,6 +723,7 @@ export async function exportarPptx(caso, tema, notas = []) {
             bold: Boolean(p.bold || el.bold), italic: Boolean(p.italic || el.italic), color: hx(p.color || el.color || tema.cores.texto),
             fontSize: Math.round(size * (p.k || 1) * 10) / 10, breakLine: j < paras.length - 1, align: p.align || el.align,
             paraSpaceAfter: j < paras.length - 1 ? Math.round(size * 0.32 * 10) / 10 : 0,
+            ...(p.antes && j > 0 ? { paraSpaceBefore: Math.round(size * p.antes * 10) / 10 } : {}),
             ...(p.bullet ? { bullet: { indent: Math.round(size) } } : {}),
           },
         }));
