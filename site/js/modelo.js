@@ -88,6 +88,13 @@ export const numSimples = s => {
 };
 
 export const variaveisAtivas = caso => caso.variaveis.filter(v => tem(v.nome));
+// Nome da variável seguido da unidade, para títulos de gráfico. Se o nome já traz a unidade ("Taxa de câmbio (R$/US$)"), ela não é repetida.
+const semEspacos = s => String(s || '').toLowerCase().replace(/\s+/g, '');
+export function nomeJaTemUnidade(v) {
+  const u = semEspacos(v?.unidade), n = semEspacos(v?.nome);
+  return Boolean(u) && (n.includes(`(${u})`) || (u.length > 1 && n.endsWith(u)));
+}
+export const nomeComUnidade = v => (tem(v?.unidade) && !nomeJaTemUnidade(v) ? `${v.nome} (${String(v.unidade).trim()})` : v.nome);
 export const catalogo = tipo => VARIAVEIS.find(x => x.id === tipo) || null;
 
 export function mesesHorizonte(ident) {
@@ -288,6 +295,35 @@ export function evidenciaDeOutraEdicao(caso, v) {
   return Boolean(emUso && o.edicao && o.edicao !== emUso.edicao && o.mantida !== emUso.edicao && equivalenteAtual(o));
 }
 
+// ---------- Texto-modelo ----------
+// Marcadores que o aplicativo escreve para o autor substituir (hoje, só o de "Listar hipóteses"). Enquanto um deles
+// estiver em qualquer texto do caso, a entrega tem pendência: o marcador iria como está para os slides e o relatório.
+export const MARCADORES = ['[fundamentar]'];
+export const marcadoresEm = txt => { const t = String(txt || '').toLowerCase(); return MARCADORES.filter(m => t.includes(m)); };
+// Onde há texto-modelo no caso: [{ etapa, onde }], na ordem das etapas.
+export function textosComMarcador(caso) {
+  const out = [], ver = (etapa, onde, txt) => { if (marcadoresEm(txt).length) out.push({ etapa, onde }); };
+  const vars = variaveisAtivas(caso), cen = s => `cenário ${s.curto.toLowerCase()}`;
+  for (const [k, rot] of [['setor', 'setor e portfólio'], ['clientes', 'perfil dos clientes'], ['mercado', 'dinâmica do mercado'], ['exposicao', 'exposição macroeconômica']]) ver(1, rot, caso.diag[k]);
+  for (const v of vars) { ver(2, `${v.nome}, leitura da tendência`, v.tendencia); ver(2, `${v.nome}, implicação`, v.implicacao); }
+  ver(2, 'consulta ao Focus', caso.consultas.focusTexto); ver(2, 'consulta à Carta de Conjuntura', caso.consultas.ipeaTexto);
+  for (const s of CENARIOS) {
+    const c = caso.cenarios[s.id];
+    ver(3, `premissas do ${cen(s)}`, c.premissas); ver(3, `projeções publicadas do ${cen(s)}`, c.publicadas); ver(3, `hipóteses próprias do ${cen(s)}`, c.hipoteses);
+    for (const v of vars) ver(3, `justificativa de ${v.nome} no ${cen(s)}`, c.traj[v.uid]?.justificativa);
+  }
+  for (const s of CENARIOS) {
+    const i = caso.impactos[s.id];
+    for (const d of DIMENSOES) ver(4, `${d.curto.toLowerCase()} no ${cen(s)}`, i[d.id]);
+    for (const v of vars) { ver(4, `efeito de ${v.nome} no cliente, ${cen(s)}`, i.cadeias[v.uid]?.cliente); ver(4, `efeito de ${v.nome} nas vendas, ${cen(s)}`, i.cadeias[v.uid]?.vendas); }
+  }
+  caso.decisoes.forEach((d, n) => { for (const [k, rot] of [['acao', 'ação'], ['evidencia', 'evidência'], ['risco', 'risco ou oportunidade'], ['contribuicao', 'contribuição']]) ver(5, `decisão ${n + 1}, ${rot}`, d[k]); });
+  ver(5, 'síntese executiva', caso.sintese);
+  // Versões resumidas escritas só para os slides (chave "s<slide>. ..."): o slide n corresponde à etapa n.
+  for (const [k, txt] of Object.entries(caso.slides?.textos || {})) { const n = Number(/^s([1-5])\./.exec(k)?.[1]); if (n) ver(n, `texto resumido do slide ${n}`, txt); }
+  return out;
+}
+
 const enumerar = (itens, max = 3) => { const l = itens.slice(0, max), resto = itens.length - l.length; return `${l.join('; ')}${resto > 0 ? `; e mais ${resto}` : ''}`; };
 // Divergências de origem do caso inteiro, já como itens de pendência do roteiro (etapas 2 e 3). Lista vazia = nada a avisar.
 export function divergencias(caso) {
@@ -392,6 +428,12 @@ export function validar(caso) {
   const decOk = caso.decisoes.filter(d => tem(d.acao) && d.cenarios?.length > 0 && tem(d.evidencia) && tem(d.risco) && tem(d.contribuicao));
   add(5, 'decisoes', 'Pelo menos três decisões comerciais completas, com cenário de aplicação e justificativa', decOk.length >= 3, `${decOk.length} de 3`);
   add(5, 'sintese', 'Síntese executiva redigida', tem(caso.sintese));
+  // Texto-modelo ("[fundamentar]") ainda não substituído: só entra na lista quando existe, sempre como pendência.
+  const modelo = textosComMarcador(caso);
+  for (const e of ETAPAS) {
+    const l = modelo.filter(m => m.etapa === e.n);
+    if (l.length) add(e.n, `modelo_${e.n}`, `Texto-modelo “${MARCADORES[0]}” substituído pelo seu texto`, false, enumerar(l.map(m => m.onde)));
+  }
 
   return itens;
 }

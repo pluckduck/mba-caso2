@@ -5,7 +5,7 @@ import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, refe
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste, luminancia, misturar } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
   horizonteTxt, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, quadro, SETA,
-  origemValor, rotuloOrigem, origemDaReferencia, registrarDigitacao, marcarComoHipotese, avisosDoValor, listaPublicadas, listaHipoteses, avisoPublicadas, avisosConsultas, equivalenteAtual, divergencias } from './modelo.js';
+  origemValor, rotuloOrigem, nomeComUnidade, marcadoresEm, textosComMarcador, MARCADORES, origemDaReferencia, registrarDigitacao, marcarComoHipotese, avisosDoValor, listaPublicadas, listaHipoteses, avisoPublicadas, avisosConsultas, equivalenteAtual, divergencias } from './modelo.js';
 import { construir, exportarPptx, notasApresentador, renderHTML, paginaDoSlide, TITULOS, capacidade, limparTexto } from './slides.js';
 import { montarRelatorio, relatorioHTML, exportarDocx, nomeDoArquivo } from './relatorio.js';
 import { explorador } from './explorador.js';
@@ -332,7 +332,19 @@ function CS(o, diretas = [], compostas = []) {
       }, 'ae-vivo'),
       botao('Remover a versão curta e usar o texto completo no slide', () => { delete c.slides.textos[keyCurta]; mudou(); redesenhar(); }, 'link'));
   }
-  return h('div', { class: 'campo-slide' }, C(o), avisoPrincipal, curta);
+  return h('div', { class: 'campo-slide' }, C(o), avisoPrincipal, vivo(() => avisoMarcador(o.obj[o.chave])), curta, keyCurta ? vivo(() => avisoMarcador(c.slides.textos[keyCurta])) : null);
+}
+// Texto-modelo escrito pelo aplicativo ("[fundamentar]") ainda no campo: sinaliza, para não ir à entrega sem o autor perceber.
+function avisoMarcador(txt) {
+  const m = marcadoresEm(txt);
+  return m.length ? faixaAviso({ texto: `Este texto ainda traz o marcador “${m[0]}”, que o aplicativo escreve para você substituir pela sua fundamentação. Enquanto ele estiver aqui, o roteiro fica com pendência e o texto vai assim para os slides e o relatório.` }) : null;
+}
+// Faixa das telas de entrega: lista onde ainda há texto-modelo.
+function faixaMarcadores() {
+  const l = textosComMarcador(estado.caso);
+  if (!l.length) return null;
+  const onde = l.slice(0, 4).map(x => x.onde).join('; ') + (l.length > 4 ? `; e mais ${l.length - 4}` : '');
+  return h('div', { class: 'faixa-alerta' }, `Há texto-modelo “${MARCADORES[0]}” ainda não substituído (${onde}). Ele aparece na entrega como está. `, h('a', { href: `#/etapa/${l[0].etapa}` }, `Corrigir na etapa ${l[0].etapa}`));
 }
 function faixaAvisosEspaco() {
   const c = estado.caso;
@@ -708,6 +720,8 @@ function etapa3() {
     const t = listaHipoteses(c, s.id);
     if (!t) return aviso(`Nenhum valor deste cenário é hipótese própria.${semOrigem(s)}`, 'alerta');
     c.cenarios[s.id].hipoteses = t; mudou(); redesenhar();
+    const n = t.split('\n').filter(l => marcadoresEm(l).length).length;
+    if (n) aviso(`${n === 1 ? '1 hipótese está sem justificativa' : `${n} hipóteses estão sem justificativa`}: o texto ficou com “${MARCADORES[0]}”. Escreva a fundamentação antes de entregar.`, 'alerta');
   };
   const meses = mesesHorizonte(c.ident);
   return h('div', { class: 'vista' }, cabecalhoEtapa(3),
@@ -718,7 +732,7 @@ function etapa3() {
         vivo(() => { const m = mesesHorizonte(c.ident); return h('p', { class: `horizonte ${m === 12 ? 'ok' : 'alerta'}` }, m ? `${m} meses: ${horizonteTxt(c.ident)}` : 'Defina início e fim', m && m !== 12 ? ' — o roteiro pede 12 meses.' : ''); }))),
     vars.length ? vars.map(blocoVar) : h('section', { class: 'cartao' }, h('p', {}, 'Selecione e nomeie pelo menos três variáveis nas etapas 1 e 2 para projetar as trajetórias.'), botao('Ir para a etapa 2', () => ir('etapa/2'), 'primario')),
     vars.length ? h('section', { class: 'cartao' }, h('h2', {}, 'Comparação dos cenários'),
-      vivo(() => barrasGrupos(vars.map(v => ({ nome: `${v.nome}${v.unidade ? ` (${v.unidade})` : ''}`, itens: CENARIOS.map(s => ({ rotulo: s.curto, valor: numSimples(c.cenarios[s.id].traj[v.uid]?.valor), cor: `var(--c-${s.id})` })) }))))) : null,
+      vivo(() => barrasGrupos(vars.map(v => ({ nome: nomeComUnidade(v), itens: CENARIOS.map(s => ({ rotulo: s.curto, valor: numSimples(c.cenarios[s.id].traj[v.uid]?.valor), cor: `var(--c-${s.id})` })) }))))) : null,
     h('div', { class: 'grade-3 cen-grade' }, CENARIOS.map(s => {
       const cen = c.cenarios[s.id];
       return h('section', { class: `cartao cen-col ${s.id}` }, h('h3', {}, s.nome), h('p', { class: 'ajuda' }, s.desc),
@@ -871,9 +885,9 @@ function vistaSlides() {
   const area = h('div', { class: 'slides-lista' });
   const alertasEl = h('div', {});
   const desenharAlertas = alertas => {
-    alertasEl.replaceChildren(
-      faixaPendencias('Os slides são gerados com o que já foi preenchido.'),
-      ...alertas.map(a => h('div', { class: 'faixa-alerta' }, a.texto)));
+    alertasEl.replaceChildren(...[
+      faixaPendencias('Os slides são gerados com o que já foi preenchido.'), faixaMarcadores(),
+      ...alertas.map(a => h('div', { class: 'faixa-alerta' }, a.texto))].filter(Boolean));
   };
   const desenhar = () => {
     const tema = temaAtual();
@@ -981,7 +995,7 @@ function vistaRelatorio() {
       h('span', { class: 'espaco' }),
       botao('Imprimir / salvar em PDF', imprimirRelatorio, 'fantasma'),
       botao('Baixar em Word (.docx)', () => { try { aviso(`Arquivo ${exportarDocx(c)} gerado.`); pedirAvaliacao('docx'); } catch (err) { aviso(`Não foi possível gerar o arquivo: ${err.message}`, 'erro'); } }, 'primario')),
-    faixaPendencias('O relatório é gerado com o que já foi preenchido.'),
+    faixaPendencias('O relatório é gerado com o que já foi preenchido.'), faixaMarcadores(),
     h('div', { class: 'rel-layout' }, indice, h('div', { class: 'rel-rolagem' }, h('div', { class: 'rel-folha' }, relatorioHTML(montarRelatorio(c))))));
 }
 

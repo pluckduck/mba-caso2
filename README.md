@@ -45,6 +45,10 @@ O aplicativo só avisa; nada é trocado sem clique do autor. Há aviso, no campo
 
 As regras estão em `site/js/modelo.js` (`origemValor`, `avisosDoValor`, `avisoPublicadas`, `avisosConsultas` e `divergencias`).
 
+### Texto-modelo
+
+"Listar hipóteses" escreve `[fundamentar]` onde falta a justificativa de um valor. Enquanto esse marcador estiver em qualquer texto do caso (inclusive nas versões resumidas dos slides), o campo fica sinalizado, o roteiro ganha uma pendência e as telas de slides e de relatório avisam. A lista de marcadores está em `MARCADORES` (`site/js/modelo.js`).
+
 ### Carregar um relatório novo
 
 Não exige nova publicação do site:

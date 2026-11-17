@@ -2,7 +2,7 @@
 // num quadro 16:9 de 13,333 x 7,5). A mesma descrição alimenta a visualização em HTML e a exportação em PPTX,
 // o que garante que o arquivo exportado corresponda ao que se vê na tela e permaneça editável no PowerPoint.
 import { fonteCss, fontePptx, misturar, luminancia } from './themes.js';
-import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, origemValor, numSimples, direcao, catalogo, quadro, SETA as GLIFO } from './modelo.js';
+import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, origemValor, numSimples, direcao, catalogo, quadro, nomeComUnidade, nomeJaTemUnidade, SETA as GLIFO } from './modelo.js';
 import { FOCUS, IPEA, fmt, comUnidade } from './refdata.js';
 
 export const W = 13.333, H = 7.5;
@@ -325,6 +325,19 @@ function pagina2(ctx, vars, ini, comConsultas) {
 // Até 4 variáveis: uma página (cartões dos cenários e gráfico). A partir de 5: a primeira página traz premissas e
 // fundamentação; as seguintes, a tabela com a trajetória de todas as variáveis (até 6 por página).
 const FONTES3 = () => `${FONTE_FOCUS()}; ${FONTE_IPEA()}; hipóteses do autor. P = valor publicado nas fontes; H = hipótese do autor.`;
+// Barras comparativas dos cenários: cada barra parte do zero. Valor positivo cresce para a direita do eixo e valor
+// negativo, para a esquerda; "lo" e "hi" são o menor e o maior valor da variável (o zero sempre está na escala).
+function barraDoZero(ctx, els, x, y, wMax, h, n, lo, hi, cor) {
+  els.push(R(x, y, wMax, h, { fill: ctx.tom, r: 0.03 }));
+  if (n === null || n === 0 || hi === lo) return;
+  const x0 = x + (wMax * (0 - lo)) / (hi - lo), w = Math.max(0.03, (wMax * Math.abs(n)) / (hi - lo));
+  els.push(R(n < 0 ? x0 - w : x0, y, w, h, { fill: cor, r: 0.03 }));
+}
+// Linha do zero, desenhada só quando há valor negativo (sem ele, o zero é a borda esquerda das barras).
+function eixoZero(ctx, els, x, y, wMax, h, lo, hi) {
+  if (!(lo < 0) || hi === lo) return;
+  els.push(R(x + (wMax * (0 - lo)) / (hi - lo) - 0.006, y, 0.012, h, { fill: ctx.c.texto }));
+}
 const corCenario = (c, cor) => (cor === c.fundo ? c.texto : (luminancia(c.superficie) < 0.35 ? cor : misturar(cor, c.texto, 0.25)));
 function paginas3(ctx) {
   const vars = variaveisAtivas(ctx.caso);
@@ -367,7 +380,7 @@ function slide3Tabela(ctx, vars) {
     const y = Y0 + hCab + r * hRow;
     if (r % 2 === 1) els.push(R(X0, y, wT, hRow, { fill: tom }));
     els.push(LN(X0, y + hRow, wT, 0, { color: c.borda, lw: 0.5 }));
-    els.push(TX(X0 + 0.12, y + 0.05, w0 - 0.24, hRow - 0.1, [P(v.nome, { bold: true }), P(limpo(v.unidade), { color: c.suave, k: 0.8 })], { max: 10.5, min: 7.5, color: c.texto, valign: 'middle' }));
+    els.push(TX(X0 + 0.12, y + 0.05, w0 - 0.24, hRow - 0.1, [P(v.nome, { bold: true }), P(nomeJaTemUnidade(v) ? '' : limpo(v.unidade), { color: c.suave, k: 0.8 })], { max: 10.5, min: 7.5, color: c.texto, valign: 'middle' }));
     const vals = CENARIOS.map(s => numSimples(caso.cenarios[s.id].traj[v.uid]?.valor));
     CENARIOS.forEach((s, i) => {
       const t = caso.cenarios[s.id].traj[v.uid] || {}, n = vals[i];
@@ -380,12 +393,12 @@ function slide3Tabela(ctx, vars) {
     const validos = vals.filter(n => n !== null), hi = Math.max(...validos, 0), lo = Math.min(...validos, 0);
     const xG = X0 + w0 + 3 * wS + 0.12, hB = Math.min(0.26, (hRow - 0.14) / 3), yB = y + (hRow - 3 * hB) / 2, wMax = wG - 0.24 - 0.8 - 0.62;
     CENARIOS.forEach((s, k) => {
-      const yy = yB + k * hB, n = vals[k], frac = n === null || hi === lo ? 0 : (n - lo) / (hi - lo);
+      const yy = yB + k * hB, n = vals[k];
       els.push(TX(xG, yy, 0.76, hB, s.curto, { max: 8.5, min: 6.5, color: c.texto, valign: 'middle' }));
-      els.push(R(xG + 0.8, yy + hB * 0.25, wMax, hB * 0.5, { fill: ctx.tom, r: 0.03 }));
-      if (frac > 0) els.push(R(xG + 0.8, yy + hB * 0.25, Math.max(0.03, wMax * frac), hB * 0.5, { fill: c[s.id], r: 0.03 }));
+      barraDoZero(ctx, els, xG + 0.8, yy + hB * 0.25, wMax, hB * 0.5, n, lo, hi, c[s.id]);
       els.push(TX(xG + 0.8 + wMax + 0.06, yy, 0.56, hB, P(n === null ? '—' : fmt(n, 2), { bold: true }), { max: 9, min: 6.5, color: c.texto, valign: 'middle' }));
     });
+    eixoZero(ctx, els, xG + 0.8, yB, wMax, 3 * hB, lo, hi);
   });
   return els;
 }
@@ -435,16 +448,15 @@ function slide3(ctx) {
       const vals = CENARIOS.map(s => numSimples(caso.cenarios[s.id].traj[v.uid]?.valor));
       const validos = vals.filter(n => n !== null);
       const hi = Math.max(...validos, 0), lo = Math.min(...validos, 0);
-      els.push(TX(x + 0.08, yG + 0.08, wV - 0.16, 0.24, P(`${v.nome}${v.unidade ? ` (${v.unidade})` : ''}`, { bold: true }), { max: 9, min: 6.5, color: c.suave, valign: 'middle' }));
+      els.push(TX(x + 0.08, yG + 0.08, wV - 0.16, 0.24, P(nomeComUnidade(v), { bold: true }), { max: 9, min: 6.5, color: c.suave, valign: 'middle' }));
       CENARIOS.forEach((s, k) => {
         const yy = yG + 0.38 + k * 0.28, n = vals[k];
         els.push(TX(x + 0.08, yy, 0.82, 0.24, s.curto, { max: 8.5, min: 6.5, color: c.texto, valign: 'middle' }));
         const wMax = wV - 0.16 - 0.86 - 0.72;
-        const frac = n === null || hi === lo ? 0 : (n - lo) / (hi - lo);
-        els.push(R(x + 0.92, yy + 0.05, wMax, 0.14, { fill: ctx.tom, r: 0.03 }));
-        if (frac > 0) els.push(R(x + 0.92, yy + 0.05, Math.max(0.03, wMax * frac), 0.14, { fill: c[s.id], r: 0.03 }));
+        barraDoZero(ctx, els, x + 0.92, yy + 0.05, wMax, 0.14, n, lo, hi, c[s.id]);
         els.push(TX(x + 0.92 + wMax + 0.06, yy, 0.66, 0.24, P(n === null ? '—' : fmt(n, 2), { bold: true }), { max: 9, min: 6.5, color: c.texto, valign: 'middle' }));
       });
+      eixoZero(ctx, els, x + 0.92, yG + 0.38, wV - 0.16 - 0.86 - 0.72, 3 * 0.28 - 0.04, lo, hi);
     });
   } else {
     els.push(TX(X0 + 0.2, yG + 0.2, X1 - X0 - 0.4, 0.5, 'Defina as trajetórias das variáveis na etapa 3.', { max: 11, color: c.suave, italic: true }));
