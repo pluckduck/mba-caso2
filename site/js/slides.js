@@ -2,8 +2,8 @@
 // num quadro 16:9 de 13,333 x 7,5). A mesma descrição alimenta a visualização em HTML e a exportação em PPTX,
 // o que garante que o arquivo exportado corresponda ao que se vê na tela e permaneça editável no PowerPoint.
 import { fonteCss, fontePptx, misturar, luminancia } from './themes.js';
-import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, classificarValor, numSimples, direcao, catalogo, quadro, SETA as GLIFO } from './modelo.js';
-import { FOCUS, IPEA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
+import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, simular, origemValor, numSimples, direcao, catalogo, quadro, SETA as GLIFO } from './modelo.js';
+import { FOCUS, IPEA, fmt, comUnidade } from './refdata.js';
 
 export const W = 13.333, H = 7.5;
 export const TITULOS = [
@@ -371,8 +371,8 @@ function slide3Tabela(ctx, vars) {
     const vals = CENARIOS.map(s => numSimples(caso.cenarios[s.id].traj[v.uid]?.valor));
     CENARIOS.forEach((s, i) => {
       const t = caso.cenarios[s.id].traj[v.uid] || {}, n = vals[i];
-      const cls = classificarValor(referenciasPublicadas(v.tipo), t.valor);
-      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls ? `  (${cls.tipo})` : ''}`;
+      const cls = origemValor(t);
+      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls && cls.tipo !== '?' ? `  (${cls.tipo})` : ''}`;
       const just = txt(3, `s3.just.${s.id}.${v.uid}`, `${v.nome} — ${s.curto}: justificativa`, t.justificativa);
       els.push(TX(X0 + w0 + i * wS + 0.12, y + 0.05, wS - 0.24, hRow - 0.1, [P(valor, { bold: true, color: corCenario(c, c[s.id]), k: 1.25 }), P(just)], { max: 9.5, min: 7, color: c.texto, valign: 'middle' }));
     });
@@ -408,11 +408,11 @@ function slide3(ctx) {
     const hLinha = Math.min(0.3, 1.1 / Math.max(vars.length, 1));
     vars.forEach((v, j) => {
       const yy = y + j * hLinha, t = cen.traj[v.uid] || {};
-      const cls = classificarValor(referenciasPublicadas(v.tipo), t.valor);
+      const cls = origemValor(t);
       const n = numSimples(t.valor);
       els.push(LN(x + 0.2, yy, wC - 0.4, 0, { color: c.borda, lw: 0.5 }));
       els.push(TX(x + 0.2, yy, wC - 2.0, hLinha, v.nome, { max: 10, min: 7, color: c.texto, valign: 'middle' }));
-      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls ? `  (${cls.tipo})` : ''}`;
+      const valor = n === null ? '—' : `${comUnidade(n, v.unidade)}${cls && cls.tipo !== '?' ? `  (${cls.tipo})` : ''}`;
       els.push(TX(x + wC - 1.85, yy, 1.65, hLinha, P(valor, { bold: true }), { max: 10.5, min: 7, color: cor === c.fundo ? c.texto : (luminancia(c.superficie) < 0.35 ? cor : misturar(cor, c.texto, 0.25)), align: 'right', valign: 'middle' }));
     });
     y += Math.max(vars.length, 1) * hLinha + 0.08;

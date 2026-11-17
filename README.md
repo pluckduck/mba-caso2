@@ -8,7 +8,7 @@ Aplicativo guiado para a execução individual do Estudo de Caso 2 da disciplina
 |---|---|---|
 | 1 | Diagnóstico do negócio e exposição macroeconômica | Seleção das variáveis prioritárias e da sensibilidade do negócio a cada uma |
 | 2 | Evidências econômicas | Explorador do Relatório Focus e da Carta de Conjuntura; registro automático de dado, natureza, fonte, data e período |
-| 3 | Arquitetura de cenários (12 meses) | Trajetórias base, favorável e adversa; distinção automática entre valor publicado e hipótese do autor |
+| 3 | Arquitetura de cenários (12 meses) | Trajetórias base, favorável e adversa; cada valor guarda a sua origem (referência publicada ou hipótese do autor), com avisos de edição e de período |
 | 4 | Impactos comerciais | Matriz de impactos, cadeia variável → cliente → vendas e simulador de sensibilidade da receita |
 | 5 | Recomendações | Decisões comerciais com cenário(s) de aplicação, síntese executiva e validação da entrega |
 | Entrega | Slides | Cinco slides gerados a partir do caso (texto resumido), dez temas personalizáveis (o participante pode salvar temas próprios com nome), modo de apresentação, exportação em PPTX e PDF |
@@ -30,6 +30,20 @@ Os dados vêm dos relatórios de apoio da atividade e são organizados em **edi�
 - SANTOS, Claudio Hamilton Matos dos; AMITRANO, Cláudio Roberto; ARAUJO, Mônica Mora y. Visão geral da conjuntura. *Carta de Conjuntura*, Brasília: Ipea, n. 71, Nota de Conjuntura 24, 2º trim. 2026.
 
 Cada caso usa uma edição de cada relatório. Casos novos começam na mais recente; casos em andamento ficam na edição em que começaram e recebem um aviso quando sai outra. Cada registro do Ipea traz a página de origem. Os valores devem ser conferidos no documento original antes de serem citados.
+
+### Origem dos valores dos cenários
+
+Na etapa 3, cada valor guarda de onde veio, no momento da escolha (`cenarios.<cenário>.traj.<variável>.origem`): referência publicada (fonte, edição, série, período e o próprio número) ou valor digitado pelo autor. O rótulo "Projeção publicada" ou "Hipótese do autor", as marcas P e H dos slides e do relatório e o texto de "Projeções publicadas — fonte e data" vêm desse registro, nunca da comparação do número com as referências: dois relatórios podem trazer o mesmo número.
+
+O aplicativo só avisa; nada é trocado sem clique do autor. Há aviso, no campo e nas pendências do roteiro, quando:
+
+- o valor veio de uma edição diferente da escolhida para o caso (com botão para atualizar para o valor da edição em uso);
+- a referência vale para um ano fora do horizonte do caso;
+- o valor não tem origem registrada (casos anteriores a este registro): o autor escolhe de novo a referência ou confirma que é hipótese própria, e até lá o valor sai sem a marca P/H;
+- o texto de "Projeções publicadas — fonte e data" cita outra edição ou foi listado antes de os valores mudarem;
+- na etapa 2, a data da consulta ao Focus ou o título da Carta registrados não são os das edições do caso, ou uma evidência veio de outra edição e ainda não foi atualizada nem mantida.
+
+As regras estão em `site/js/modelo.js` (`origemValor`, `avisosDoValor`, `avisoPublicadas`, `avisosConsultas` e `divergencias`).
 
 ### Carregar um relatório novo
 

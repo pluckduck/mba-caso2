@@ -4,7 +4,8 @@ import { h, campo, botao, aviso, modal, selo, barrasGrupos, anel, montarSlide } 
 import { FOCUS, IPEA, VARIAVEIS, GRUPOS, variaveisDoGrupo, FONTES_CONSULTA, referenciasPublicadas, fmt, plural, comUnidade } from './refdata.js';
 import { TEMAS, FONTES_TIPO, OPCOES_ELEMENTOS, ROTULOS_CORES, resolverTema, aplicarTemaNaInterface, contraste, luminancia, misturar } from './themes.js';
 import { CENARIOS, DIMENSOES, NATUREZAS, ETAPAS, casoVazio, normalizar, novaVariavel, novaDecisao, variaveisAtivas, catalogo, mesesHorizonte,
-  horizonteTxt, classificarValor, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, evidenciaFocus, evidenciaIpea, quadro, SETA } from './modelo.js';
+  horizonteTxt, direcao, simular, validar, progresso, numSimples, uid, sugestaoEvidencia, opcoesEvidencia, mesmaOrigem, quadro, SETA,
+  origemValor, rotuloOrigem, origemDaReferencia, registrarDigitacao, marcarComoHipotese, avisosDoValor, listaPublicadas, listaHipoteses, avisoPublicadas, avisosConsultas, equivalenteAtual, divergencias } from './modelo.js';
 import { construir, exportarPptx, notasApresentador, renderHTML, paginaDoSlide, TITULOS, capacidade, limparTexto } from './slides.js';
 import { montarRelatorio, relatorioHTML, exportarDocx, nomeDoArquivo } from './relatorio.js';
 import { explorador } from './explorador.js';
@@ -138,6 +139,8 @@ async function trocarEdicao(fonte, id) {
     const recente = ed.maisRecente(fonte);
     if (recente && recente.id !== id) c.edicoes.mantida[fonte] = recente.id; else delete c.edicoes.mantida[fonte];
     mudou(); aviso(`O caso passa a usar ${fonte === 'focus' ? 'o Focus de' : 'a Carta'} ${nova.rotulo}.`);
+    // Nada é trocado sozinho: o que veio da edição anterior fica como está e entra nas pendências do roteiro.
+    if (divergencias(c).length) aviso('Há dados registrados com outra edição nas etapas 2 e 3. Nada foi alterado: veja os avisos e as pendências do roteiro.', 'alerta');
   } catch (e) { aviso(`Não foi possível trocar a edição: ${e.message}`, 'erro'); }
   trocandoEdicao = false; redesenhar();
 }
@@ -250,6 +253,11 @@ function rodapeEtapa(n) {
     n < 5 ? botao(`${ETAPAS[n].titulo} →`, () => ir(`etapa/${n + 1}`), 'primario') : botao('Ir para a entrega →', () => ir('entrega'), 'primario'));
 }
 const C = (o) => campo({ aoMudar: mudou, ...o });
+// Aviso de divergência de origem (edição, período ou origem não registrada), no mesmo padrão do aviso de dado de edição anterior da etapa 2.
+function faixaAviso(a, acoes = []) {
+  if (!a) return null;
+  return h('div', { class: 'faixa-origem antiga' }, h('span', {}, a.texto), acoes.length ? h('div', { class: 'acoes' }, acoes) : null);
+}
 
 // ---------- Aviso de espaço no slide (campos das etapas) ----------
 // Cada campo de texto das etapas mostra a contagem de caracteres e se o texto cabe no bloco do slide em que aparece,
@@ -478,15 +486,6 @@ function autoPreencher(v, cat) {
   aplicarEvidencia(v, ev, { auto: true });
   return true;
 }
-// O mesmo dado (série e período) na edição que o caso usa agora; null se não existir.
-function equivalenteAtual(o) {
-  if (o.fonte === 'focus') {
-    const linha = (o.tipo === 'mensal' ? FOCUS.mensal : FOCUS.anual).find(x => x.id === o.indicador);
-    return linha?.v[o.periodo] ? evidenciaFocus(linha, o.periodo, o.tipo) : null;
-  }
-  const r = IPEA.registros.find(x => x.id === o.registro) || (o.chave ? IPEA.registros.find(x => x.chave === o.chave && (x.ano || null) === (o.ano || null)) : null);
-  return r ? evidenciaIpea(r) : null;
-}
 const nomeEdicao = (fonte, e, reserva = '') => (fonte === 'focus' ? `Focus (BCB), ${e?.rotulo || reserva}` : `Carta de Conjuntura ${e?.rotulo || reserva} (Ipea)`);
 // Faixa logo abaixo do título da variável: de onde veio o dado, sugestão disponível ou dado de edição anterior.
 function faixaOrigem(v, cat) {
@@ -644,10 +643,12 @@ function etapa2() {
         h('div', {},
           h('div', { class: 'cab-linha' }, h('h3', {}, 'Relatório Focus'), botao('Preencher a data do relatório', () => { c.consultas.focusData = FOCUS.dataTxt; mudou(); redesenhar(); }, 'fantasma pequeno')),
           C({ rotulo: 'Data / período', obj: c.consultas, chave: 'focusData', tipo: 'text', placeholder: 'Data do relatório consultado' }),
+          vivo(() => faixaAviso(avisosConsultas(c).focus)),
           CS({ rotulo: 'Expectativas relevantes e contribuição para a análise', obj: c.consultas, chave: 'focusTexto', linhas: 5 }, ['s2.focus'])),
         h('div', {},
           h('div', { class: 'cab-linha' }, h('h3', {}, 'Carta de Conjuntura — Ipea'), botao('Preencher o título', () => { c.consultas.ipeaTitulo = `${IPEA.curtoNota} — ${IPEA.periodo}`; mudou(); redesenhar(); }, 'fantasma pequeno')),
           C({ rotulo: 'Título / publicação / período', obj: c.consultas, chave: 'ipeaTitulo', tipo: 'text', placeholder: 'Edição consultada' }),
+          vivo(() => faixaAviso(avisosConsultas(c).ipea)),
           CS({ rotulo: 'Argumento central e contribuição para a análise', obj: c.consultas, chave: 'ipeaTexto', linhas: 5 }, ['s2.ipea']))),
       h('details', { class: 'roteiro' }, h('summary', {}, 'Guia de leitura da Carta de Conjuntura (com páginas)'),
         h('ul', {}, IPEA.argumentos.map(a => h('li', {}, h('strong', {}, `${a.titulo}: `), a.texto, h('em', {}, ` (p. ${a.pagina})`)))))),
@@ -663,19 +664,32 @@ function etapa3() {
     const coluna = s => {
       const t = (c.cenarios[s.id].traj[v.uid] ||= { valor: '', justificativa: '' });
       const tag = h('span', { class: 'tag' });
+      // O rótulo vem da origem gravada com o valor, nunca da comparação do número com as referências.
       const pintar = () => {
-        const cls = classificarValor(refs, t.valor);
-        tag.className = `tag ${cls ? cls.tipo : ''}`;
-        tag.textContent = !cls ? 'sem valor' : (cls.tipo === 'P' ? `${cls.ref.natureza === 'Dado observado' ? 'Dado observado publicado' : 'Projeção publicada'} · ${cls.ref.rotulo}` : 'Hipótese do autor');
-        tag.title = cls?.ref ? `${cls.ref.fonte} — ${cls.ref.periodo}` : '';
+        const cls = origemValor(t);
+        tag.className = `tag ${cls && cls.tipo !== '?' ? cls.tipo : ''}`;
+        tag.textContent = rotuloOrigem(cls);
+        tag.title = cls?.ref ? `${cls.ref.citacao} — ${cls.ref.periodo}` : '';
       };
-      const entrada = h('input', { type: 'number', step: cat.passo, value: t.valor, 'aria-label': `${v.nome} no ${s.nome}`, oninput: e => { t.valor = e.target.value; faixa.value = e.target.value; pintar(); mudou(); } });
-      const faixa = h('input', { type: 'range', min: cat.min, max: cat.max, step: cat.passo, value: numSimples(t.valor) ?? numSimples(v.valorNum) ?? (cat.min + cat.max) / 2, 'aria-label': `Ajuste de ${v.nome} no ${s.nome}`, oninput: e => { t.valor = e.target.value; entrada.value = e.target.value; pintar(); mudou(); } });
-      const sel = refs.length ? h('select', { 'aria-label': 'Usar referência publicada', onchange: e => { if (e.target.value === '') return; t.valor = String(refs[Number(e.target.value)].valor); entrada.value = t.valor; faixa.value = t.valor; e.target.value = ''; pintar(); mudou(); } },
+      // Valor digitado (ou ajustado no controle): hipótese do autor. Referência escolhida: grava fonte, edição e período.
+      const digitar = valor => { t.valor = valor; registrarDigitacao(t); pintar(); mudou(); };
+      const usarReferencia = r => { t.valor = String(r.valor); t.origem = origemDaReferencia(r); entrada.value = t.valor; faixa.value = t.valor; pintar(); mudou(); };
+      const virarHipotese = () => { marcarComoHipotese(t); pintar(); mudou(); };
+      const entrada = h('input', { type: 'number', step: cat.passo, value: t.valor, 'aria-label': `${v.nome} no ${s.nome}`, oninput: e => { faixa.value = e.target.value; digitar(e.target.value); } });
+      const faixa = h('input', { type: 'range', min: cat.min, max: cat.max, step: cat.passo, value: numSimples(t.valor) ?? numSimples(v.valorNum) ?? (cat.min + cat.max) / 2, 'aria-label': `Ajuste de ${v.nome} no ${s.nome}`, oninput: e => { entrada.value = e.target.value; digitar(e.target.value); } });
+      const sel = refs.length ? h('select', { 'aria-label': 'Usar referência publicada', onchange: e => { if (e.target.value === '') return; usarReferencia(refs[Number(e.target.value)]); e.target.value = ''; } },
         h('option', { value: '' }, 'Usar referência publicada…'), refs.map((r, i) => h('option', { value: i }, `${r.rotulo}: ${fmt(r.valor, r.casas)} (${r.periodo})`))) : null;
+      // Avisos do valor: outra edição, período fora do horizonte ou origem não registrada. Nada muda sem clique do autor.
+      const avisosEl = vivo(() => avisosDoValor(c, v, s.id).map(a => {
+        const acoes = [];
+        if (a.tipo === 'edicao' && a.atual) acoes.push(botao(a.igual ? `Atualizar a origem (o valor continua ${fmt(a.atual.valor, a.atual.casas)})` : `Atualizar para ${fmt(a.atual.valor, a.atual.casas)}`, () => usarReferencia(a.atual), 'primario pequeno'));
+        acoes.push(botao(a.tipo === 'origem' ? 'É hipótese minha' : 'Manter como hipótese minha', virarHipotese, 'pequeno'));
+        const extra = a.tipo === 'edicao' && !a.atual ? ' Não há valor equivalente na edição em uso: escolha outra referência.' : '';
+        return faixaAviso({ texto: `${a.texto}${extra}` }, acoes);
+      }));
       pintar();
       return h('div', { class: `cen-col ${s.id}` }, h('h4', {}, s.curto),
-        h('div', { class: 'valor-linha' }, entrada, h('span', { class: 'unid' }, v.unidade)), faixa, tag, sel,
+        h('div', { class: 'valor-linha' }, entrada, h('span', { class: 'unid' }, v.unidade)), faixa, tag, avisosEl, sel,
         CS({ rotulo: 'Justificativa', obj: t, chave: 'justificativa', linhas: 2, placeholder: 'Por que este valor neste cenário?' }, [`s3.just.${s.id}.${v.uid}`], [`s3.fund.${s.id}`]));
     };
     return h('section', { class: 'cartao' },
@@ -683,14 +697,17 @@ function etapa3() {
       refs.length ? h('p', { class: 'refs' }, 'Referências publicadas: ', refs.map(r => h('span', { class: `selo ${r.origem}`, title: `${r.fonte} — ${r.periodo}` }, `${r.rotulo}: ${fmt(r.valor, r.casas)}`))) : h('p', { class: 'ajuda' }, 'Não há projeção publicada para esta variável no Focus nem na Carta de Conjuntura; os valores serão marcados como hipótese do autor. Se a fonte externa publicar projeções, cite-as na justificativa.'),
       h('div', { class: 'grade-3 cen-grade' }, CENARIOS.map(coluna)));
   };
-  const listar = (s, tipo) => {
-    const linhasTxt = vars.map(v => {
-      const t = c.cenarios[s.id].traj[v.uid]; const cls = classificarValor(referenciasPublicadas(v.tipo), t?.valor);
-      if (!cls || cls.tipo !== tipo) return null;
-      const val = `${v.nome}: ${comUnidade(numSimples(t.valor), v.unidade)}`;
-      return tipo === 'P' ? `${val} — ${cls.ref.fonte}, ${cls.ref.periodo}.` : `${val} — hipótese do autor: ${String(t.justificativa || '').trim() || '[fundamentar]'}`;
-    }).filter(Boolean);
-    return linhasTxt.join('\n');
+  // Valores sem origem registrada não entram em nenhuma das duas listas: o autor precisa conferi-los antes.
+  const semOrigem = s => (vars.some(v => origemValor(c.cenarios[s.id].traj[v.uid])?.tipo === '?') ? ' Há valores sem origem registrada neste cenário: confira-os antes.' : '');
+  const listarPublicadas = s => {
+    const cen = c.cenarios[s.id], t = listaPublicadas(c, s.id);
+    if (!t) return aviso(`Nenhum valor deste cenário veio de uma referência publicada do Focus ou do Ipea.${semOrigem(s)}`, 'alerta');
+    cen.publicadas = t; cen.publicadasLista = t; mudou(); redesenhar();
+  };
+  const listarHipoteses = s => {
+    const t = listaHipoteses(c, s.id);
+    if (!t) return aviso(`Nenhum valor deste cenário é hipótese própria.${semOrigem(s)}`, 'alerta');
+    c.cenarios[s.id].hipoteses = t; mudou(); redesenhar();
   };
   const meses = mesesHorizonte(c.ident);
   return h('div', { class: 'vista' }, cabecalhoEtapa(3),
@@ -706,9 +723,11 @@ function etapa3() {
       const cen = c.cenarios[s.id];
       return h('section', { class: `cartao cen-col ${s.id}` }, h('h3', {}, s.nome), h('p', { class: 'ajuda' }, s.desc),
         CS({ rotulo: 'Condição econômica e premissas centrais', obj: cen, chave: 'premissas', linhas: 4 }, [`s3.premissas.${s.id}`]),
-        h('div', { class: 'cab-linha' }, h('label', {}, 'Projeções publicadas — fonte e data'), botao('Listar automaticamente', () => { const t = listar(s, 'P'); if (!t) return aviso('Nenhum valor deste cenário coincide com um valor publicado no Focus ou no Ipea.', 'alerta'); cen.publicadas = t; mudou(); redesenhar(); }, 'fantasma pequeno')),
+        h('div', { class: 'cab-linha' }, h('label', {}, 'Projeções publicadas — fonte e data'), botao('Listar automaticamente', () => listarPublicadas(s), 'fantasma pequeno')),
         CS({ obj: cen, chave: 'publicadas', linhas: 3 }, [], [`s3.fund.${s.id}`]),
-        h('div', { class: 'cab-linha' }, h('label', {}, 'Hipóteses próprias — fundamentação'), botao('Listar hipóteses', () => { const t = listar(s, 'H'); if (!t) return aviso('Nenhum valor deste cenário é hipótese própria.', 'alerta'); cen.hipoteses = t; mudou(); redesenhar(); }, 'fantasma pequeno')),
+        // O texto listado fica desatualizado quando os valores ou a edição do caso mudam; ele nunca é reescrito sozinho.
+        vivo(() => { const a = avisoPublicadas(c, s.id); return faixaAviso(a, a?.revisavel ? [botao('Já revisei o texto', () => { cen.publicadasLista = listaPublicadas(c, s.id); mudou(); }, 'pequeno')] : []); }),
+        h('div', { class: 'cab-linha' }, h('label', {}, 'Hipóteses próprias — fundamentação'), botao('Listar hipóteses', () => listarHipoteses(s), 'fantasma pequeno')),
         CS({ obj: cen, chave: 'hipoteses', linhas: 3 }, [], [`s3.fund.${s.id}`]));
     })),
     h('details', { class: 'roteiro cartao' }, h('summary', {}, 'Fatores de risco apontados pelo Ipea (apoio para os cenários favorável e adverso)'),

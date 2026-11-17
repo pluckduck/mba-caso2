@@ -2,8 +2,8 @@
 // material da disciplina, com o texto completo das etapas (sem resumo nem corte). O mesmo modelo alimenta a tela, a
 // impressão em PDF e o arquivo do Word. A aparência é fixa: o tema visual vale só para os slides.
 import { h } from './ui.js';
-import { FOCUS, IPEA, referenciasPublicadas, fmt, comUnidade } from './refdata.js';
-import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, mesesHorizonte, simular, classificarValor, numSimples, direcao, quadro, catalogo, serieDe, observadoEm, cenariosTxt, SETA } from './modelo.js';
+import { FOCUS, IPEA, fmt, comUnidade } from './refdata.js';
+import { CENARIOS, DIMENSOES, variaveisAtivas, horizonteTxt, mesesHorizonte, simular, origemValor, numSimples, direcao, quadro, catalogo, serieDe, observadoEm, cenariosTxt, SETA } from './modelo.js';
 import { zip } from './zip.js';
 
 const limpo = s => String(s ?? '').trim();
@@ -84,8 +84,8 @@ export function montarRelatorio(caso) {
   const trajetorias = sId => (vars.length ? vars : [null, null, null]).map((v, i) => {
     if (!v) return { t: 'traj', nome: `Variável ${i + 1}`, valor: '', selo: null, just: '' };
     const t = caso.cenarios[sId].traj[v.uid] || {}, n = numSimples(t.valor);
-    const cls = classificarValor(referenciasPublicadas(v.tipo), t.valor);
-    return { t: 'traj', nome: v.nome, valor: n === null ? '' : comUnidade(n, v.unidade), selo: cls?.tipo || null, just: limpo(t.justificativa) };
+    const cls = origemValor(t);   // origem gravada com o valor; sem origem registrada, o valor sai sem a marca P/H
+    return { t: 'traj', nome: v.nome, valor: n === null ? '' : comUnidade(n, v.unidade), selo: cls && cls.tipo !== '?' ? cls.tipo : null, just: limpo(t.justificativa) };
   });
   secoes.push({ num: '03', titulo: 'Arquitetura de cenários — Horizonte de 12 meses',
     intro: [rotulo('Premissas, evidências e hipóteses por cenário'), linha('Horizonte comum:', meses ? `de ${horizonteTxt(caso.ident)} (${meses} ${meses === 1 ? 'mês' : 'meses'}).` : '')],

@@ -40,7 +40,7 @@ function aplicarFocus(ed, linhas) {
     }
     FOCUS[tipo] = [...mapa.values()];
   }
-  Object.assign(FOCUS, ed.metadados || {}, { edicao: ed.id, data: ed.data_referencia });
+  Object.assign(FOCUS, ed.metadados || {}, { edicao: ed.id, data: ed.data_referencia, divulgacao: ed.data_divulgacao || null });
 }
 function aplicarIpea(ed, linhas) {
   IPEA.registros = linhas.map(r => ({ id: r.id, tema: r.tema, indicador: r.indicador, valor: r.valor, unidade: r.unidade, periodo: r.periodo, natureza: r.natureza, pagina: r.pagina, nota: r.nota || '', chave: r.chave || undefined, ano: r.ano || undefined }));
@@ -76,7 +76,7 @@ export async function usarEdicao(fonte, id) {
   const ed = edicao(id) || EDICOES_EMBUTIDAS.find(e => e.fonte === fonte);
   const linhas = await dadosDe(ed);
   if (linhas) (fonte === 'focus' ? aplicarFocus : aplicarIpea)(ed, linhas);
-  else if (fonte === 'focus') { Object.assign(FOCUS, copiar(EMBUTIDO.focus), ed.metadados || {}, { edicao: ed.id }); }
+  else if (fonte === 'focus') { Object.assign(FOCUS, copiar(EMBUTIDO.focus), ed.metadados || {}, { edicao: ed.id, divulgacao: ed.data_divulgacao || null }); }
   else { Object.assign(IPEA, copiar(EMBUTIDO.ipea), ed.metadados || {}, { edicao: ed.id, data: ed.data_referencia }); }
   if (fonte === 'ipea') IPEA.anterior = await anteriorIpea(ed);
   estadoEdicoes.emUso[fonte] = ed.id;

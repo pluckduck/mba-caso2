@@ -383,6 +383,7 @@ export const registrosIpeaDe = v => (v?.ipea ? IPEA.registros.filter(r => r.chav
 export const valorIpea = r => comUnidade(r.valor, r.unidade, String(r.unidade || '').startsWith('%') ? Math.max(1, casasDe(r.valor)) : casasDe(r.valor));
 
 // Referências publicadas para uma variável do catálogo (Focus e Ipea), usadas no simulador de cenários.
+// Cada referência leva a sua identificação (edição, série e ano), que é gravada junto com o valor quando o autor a escolhe.
 export function referenciasPublicadas(varId) {
   const v = VARIAVEIS.find(x => x.id === varId);
   if (!v) return [];
@@ -391,12 +392,14 @@ export function referenciasPublicadas(varId) {
     const linha = FOCUS.anual.find(x => x.id === v.focus);
     for (const ano of FOCUS.anos.slice(0, 2)) {
       const c = linha?.v[ano];
-      if (c) out.push({ valor: c.hoje, casas: linha.casas ?? 2, rotulo: `Focus ${ano}`, fonte: `Focus (BCB), ${FOCUS.dataTxt}`, periodo: `fim de ${ano}`, origem: 'focus' });
+      if (c) out.push({ valor: c.hoje, casas: linha.casas ?? 2, rotulo: `Focus ${ano}`, fonte: `Focus (BCB), ${FOCUS.dataTxt}`, periodo: `fim de ${ano}`, origem: 'focus',
+        edicao: FOCUS.edicao, edicaoTxt: FOCUS.dataTxt, serie: v.focus, ano: Number(ano) });
     }
   }
   if (v.ipea) {
     for (const r of registrosIpeaDe(v)) {
-      out.push({ valor: r.valor, casas: casasDe(r.valor), rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `${IPEA.curto} (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador });
+      out.push({ valor: r.valor, casas: casasDe(r.valor), rotulo: r.ano ? `Ipea ${r.ano}` : `Ipea · ${r.indicador}`, fonte: `${IPEA.curto} (Ipea), p. ${r.pagina}`, periodo: r.periodo, origem: 'ipea', natureza: r.natureza, indicador: r.indicador,
+        edicao: IPEA.edicao, edicaoTxt: `nº ${IPEA.numero}`, serie: r.id, chave: r.chave || null, ano: r.ano || null });
     }
   }
   return out;

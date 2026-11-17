@@ -241,6 +241,8 @@ h2 .selo { margin-left: .4rem; vertical-align: middle; font-family: var(--f-corp
 .faixa-origem.ok { border-color: var(--c-favoravel); background: color-mix(in srgb, var(--c-favoravel) 8%, var(--c-superficie)); }
 .faixa-origem.antiga { border-color: var(--c-destaque); background: color-mix(in srgb, var(--c-destaque) 10%, var(--c-superficie)); }
 .faixa-origem.sugestao { border-style: dashed; border-color: var(--c-primaria); }
+/* Avisos de origem dentro das colunas estreitas dos cenários (etapa 3): mesmo aviso, em tamanho compatível com a coluna. */
+.cen-col .faixa-origem { font-size: .82rem; padding: .45rem .6rem; margin: .1rem 0 .5rem; } .cen-col .faixa-origem > span { flex-basis: 100%; }
 .escolha-dado { display: flex; flex-direction: column; gap: 1rem; }
 .grupo-opcoes { display: flex; flex-direction: column; gap: .4rem; }
 .grupo-opcoes-cab { display: flex; align-items: baseline; gap: .3rem .7rem; flex-wrap: wrap; } .grupo-opcoes-cab h4 { margin: 0; font-family: var(--f-titulo); font-size: 1.02rem; } .grupo-opcoes-cab span { font-size: .84rem; color: var(--c-suave); }

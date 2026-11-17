@@ -1,5 +1,5 @@
 // Modelo do caso: espelha as cinco seções do roteiro do Estudo de Caso 2 e os critérios de validação da entrega.
-import { VARIAVEIS, FOCUS, IPEA, SERIES_OBS, OBSERVADOS, fmt, comUnidade, valorIpea, registrosIpeaDe } from './refdata.js';
+import { VARIAVEIS, FOCUS, IPEA, SERIES_OBS, OBSERVADOS, fmt, comUnidade, valorIpea, registrosIpeaDe, referenciasPublicadas } from './refdata.js';
 
 export const CENARIOS = [
   { id: 'base', nome: 'Cenário base', curto: 'Base', desc: 'Evolução considerada mais provável, fundamentada nas expectativas consultadas.' },
@@ -108,12 +108,207 @@ export function cenariosTxt(ids) {
 export const mesTxt = ym => { const [a, m] = (ym || '').split('-').map(Number); return a && m ? `${MESES[m - 1]} ${a}` : '—'; };
 export const horizonteTxt = ident => `${mesTxt(ident.inicio)} a ${mesTxt(ident.fim)}`;
 
-// Um valor de cenário é "publicado" quando coincide com uma referência do Focus ou do Ipea; caso contrário é hipótese do autor.
-export function classificarValor(refs, valor) {
-  const n = numSimples(valor);
+// ---------- Origem dos valores dos cenários ----------
+// Cada valor de cenário guarda de onde veio (traj[uid].origem), gravado no momento da escolha:
+//   referência publicada: { tipo: 'publicada', valor, fonte ('focus' | 'ipea'), edicao, edicaoTxt, serie, chave, ano, rotulo, periodo, natureza, citacao, casas }
+//   valor digitado:       { tipo: 'autor', valor }
+// O rótulo do valor vem sempre desse registro, nunca da comparação do número com as referências: dois relatórios
+// podem trazer o mesmo número. O "valor" gravado amarra a origem ao número; se os dois não baterem (caso gravado
+// antes de a origem existir, ou valor alterado por outra versão do aplicativo), a origem é tratada como não registrada.
+export const origemDaReferencia = r => ({ tipo: 'publicada', valor: r.valor, fonte: r.origem, edicao: r.edicao, edicaoTxt: r.edicaoTxt, serie: r.serie, chave: r.chave ?? null, ano: r.ano ?? null,
+  rotulo: r.rotulo, periodo: r.periodo, natureza: r.natureza || 'Projeção publicada', indicador: r.indicador || null, citacao: r.fonte, casas: r.casas });
+const mesmoNumero = (a, b) => typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-9;
+// Chamado quando o autor digita o valor (ou move o controle): passa a ser hipótese do autor.
+// Se o número continua igual ao gravado, a origem não muda (digitar "12,50" sobre "12,5" não troca nada).
+export function registrarDigitacao(t) {
+  const n = numSimples(t.valor);
+  if (n === null) { delete t.origem; return; }
+  if (t.origem && mesmoNumero(t.origem.valor, n)) return;
+  t.origem = { tipo: 'autor', valor: n };
+}
+export const marcarComoHipotese = t => { const n = numSimples(t.valor); if (n === null) delete t.origem; else t.origem = { tipo: 'autor', valor: n }; };
+// Classificação de um valor de cenário: null (sem valor), P (referência publicada), H (hipótese do autor) ou ? (origem não registrada).
+export function origemValor(t) {
+  const n = numSimples(t?.valor);
   if (n === null) return null;
-  const r = refs.find(x => Math.abs(x.valor - n) < 1e-9);
-  return r ? { tipo: 'P', ref: r } : { tipo: 'H' };
+  const o = t.origem;
+  if (o && mesmoNumero(o.valor, n)) {
+    if (o.tipo === 'publicada' && o.fonte && o.edicao) return { tipo: 'P', ref: o };
+    if (o.tipo === 'autor') return { tipo: 'H' };
+  }
+  return { tipo: '?' };
+}
+export const rotuloOrigem = cls => (!cls ? 'sem valor' : cls.tipo === 'P' ? `${cls.ref.natureza === 'Dado observado' ? 'Dado observado publicado' : 'Projeção publicada'} · ${cls.ref.rotulo}`
+  : cls.tipo === 'H' ? 'Hipótese do autor' : 'Origem não registrada');
+
+// Dados da edição que o caso usa (FOCUS ou IPEA); null se, por falha de carga, os dados na tela forem de outra edição.
+function edicaoEmUso(caso, fonte) {
+  const d = fonte === 'focus' ? FOCUS : IPEA, id = caso.edicoes?.[fonte] || d.edicao;
+  return d.edicao === id ? d : null;
+}
+// "6 de novembro de 2026" e "13 de novembro de 2026" -> "6 de novembro" e "13 de novembro" (o ano só aparece se for diferente).
+function semAnoComum(a, b) {
+  const ra = /^(.*) de (\d{4})$/.exec(a || ''), rb = /^(.*) de (\d{4})$/.exec(b || '');
+  return ra && rb && ra[2] === rb[2] ? [ra[1], rb[1]] : [a || '', b || ''];
+}
+export function anosDoHorizonte(ident) {
+  const a1 = Number((ident?.inicio || '').split('-')[0]), a2 = Number((ident?.fim || '').split('-')[0]);
+  if (!a1 || !a2 || a2 < a1) return null;
+  return Array.from({ length: a2 - a1 + 1 }, (_, i) => a1 + i);
+}
+// A mesma série e o mesmo período na edição em uso (para o botão "Atualizar"); null se não houver.
+export function referenciaAtual(tipoVar, o) {
+  const refs = referenciasPublicadas(tipoVar).filter(r => r.origem === o.fonte);
+  if (o.fonte === 'focus') return refs.find(r => r.serie === o.serie && r.ano === o.ano) || null;
+  const mesmoIndicador = r => !o.indicador || !r.indicador || r.indicador === o.indicador;
+  return refs.find(r => r.serie === o.serie && mesmoIndicador(r))
+    || (o.chave && o.ano ? refs.find(r => r.chave === o.chave && r.ano === o.ano && r.natureza === o.natureza && mesmoIndicador(r)) : null) || null;
+}
+// Avisos de um valor de cenário: origem não registrada, valor de outra edição e referência fora do horizonte do caso.
+// Nada é trocado sozinho: cada aviso só descreve a divergência; quem decide é o autor.
+export function avisosDoValor(caso, v, sId) {
+  const cls = origemValor(caso.cenarios[sId]?.traj[v.uid]);
+  if (!cls || cls.tipo === 'H') return [];
+  if (cls.tipo === '?') return [{ tipo: 'origem', texto: 'Origem não registrada — confira ou escolha de novo a referência.' }];
+  const o = cls.ref, out = [], emUso = edicaoEmUso(caso, o.fonte);
+  if (emUso && o.edicao !== emUso.edicao) {
+    const atual = referenciaAtual(v.tipo, o);
+    let texto;
+    if (o.fonte === 'focus') { const [de, para] = semAnoComum(o.edicaoTxt, FOCUS.dataTxt); texto = `Valor do Focus de ${de}; o caso usa a edição de ${para}.`; }
+    else texto = `Valor da Carta ${o.edicaoTxt}; o caso usa a Carta nº ${IPEA.numero}.`;
+    out.push({ tipo: 'edicao', texto, atual, igual: Boolean(atual) && mesmoNumero(atual.valor, o.valor) });
+  }
+  const anos = anosDoHorizonte(caso.ident);
+  if (o.ano && anos && !anos.includes(o.ano)) out.push({ tipo: 'periodo', texto: `A referência ${o.rotulo} vale para ${o.ano}; o horizonte do caso vai de ${horizonteTxt(caso.ident)}.` });
+  return out;
+}
+
+// Texto dos campos "Projeções publicadas — fonte e data" e "Hipóteses próprias — fundamentação", gerado a partir da origem gravada.
+export function listaPublicadas(caso, sId) {
+  return variaveisAtivas(caso).map(v => {
+    const t = caso.cenarios[sId].traj[v.uid], cls = origemValor(t);
+    return cls?.tipo === 'P' ? `${v.nome}: ${comUnidade(numSimples(t.valor), v.unidade)} — ${cls.ref.citacao}, ${cls.ref.periodo}.` : null;
+  }).filter(Boolean).join('\n');
+}
+export function listaHipoteses(caso, sId) {
+  return variaveisAtivas(caso).map(v => {
+    const t = caso.cenarios[sId].traj[v.uid], cls = origemValor(t);
+    return cls?.tipo === 'H' ? `${v.nome}: ${comUnidade(numSimples(t.valor), v.unidade)} — hipótese do autor: ${String(t.justificativa || '').trim() || '[fundamentar]'}` : null;
+  }).filter(Boolean).join('\n');
+}
+
+// Datas escritas em um texto livre: "13 de novembro de 2026", "13 nov. 2026", "13/11/2026", "13/11", "2026-11-13".
+const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+export function datasNoTexto(txt) {
+  const s = String(txt || '').toLowerCase(), out = [];
+  const ano = a => (a ? (a.length === 2 ? 2000 + Number(a) : Number(a)) : null);
+  for (const m of s.matchAll(/(\d{1,2})(?:º|°)?\s+(?:de\s+)?(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)(?![a-zà-ú])\.?(?:\s+(?:de\s+)?(\d{4}))?/g))
+    out.push({ d: Number(m[1]), m: MESES_ABREV.indexOf(m[2].slice(0, 3)) + 1, a: ano(m[3]) });
+  for (const m of s.matchAll(/(?:^|[^\d/])(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?(?![\d/])/g)) out.push({ d: Number(m[1]), m: Number(m[2]), a: ano(m[3]) });
+  for (const m of s.matchAll(/(\d{4})-(\d{2})-(\d{2})/g)) out.push({ d: Number(m[3]), m: Number(m[2]), a: Number(m[1]) });
+  return out.filter(x => x.d >= 1 && x.d <= 31 && x.m >= 1 && x.m <= 12);
+}
+const mesmaData = (x, iso) => Boolean(iso) && x.d === Number(iso.slice(8, 10)) && x.m === Number(iso.slice(5, 7)) && (x.a === null || x.a === Number(iso.slice(0, 4)));
+// A data é a da edição do Focus em uso? Vale a data de referência do relatório (sexta-feira) ou a de divulgação (segunda-feira).
+const dataDoFocusEmUso = x => mesmaData(x, FOCUS.data) || mesmaData(x, FOCUS.divulgacao);
+const dataTxt = x => `${x.d} de ${['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][x.m - 1]}${x.a ? ` de ${x.a}` : ''}`;
+// Números de Carta de Conjuntura citados em um texto ("Carta de Conjuntura nº 72", "Carta 72", "nº 72").
+export function cartasNoTexto(txt) {
+  const s = String(txt || ''), out = [];
+  for (const m of s.matchAll(/carta(?:\s+de\s+conjuntura)?\s*(?:n[º°o]?\.?\s*)?(\d{1,3})(?![\dº°ª])/gi)) out.push(Number(m[1]));
+  if (!out.length) for (const m of s.matchAll(/(?:^|[^a-zà-ú])n[º°]\s*(\d{1,3})(?![\dº°ª])/gi)) out.push(Number(m[1]));
+  return out;
+}
+// Datas que um texto atribui ao Focus (as que vêm logo depois da palavra "Focus").
+function datasDoFocusNoTexto(txt) {
+  const s = String(txt || ''), out = [];
+  for (const m of s.matchAll(/focus/gi)) out.push(...datasNoTexto(s.slice(m.index, m.index + 70).split('\n')[0]));
+  return out;
+}
+
+// Consultas obrigatórias da etapa 2: a data do Focus e o título da Carta registrados batem com as edições do caso?
+// Só há aviso quando o texto identifica outra edição; texto sem data (ou sem número da Carta) não é julgado.
+export function avisosConsultas(caso) {
+  const out = { focus: null, ipea: null };
+  if (edicaoEmUso(caso, 'focus')) {
+    const datas = datasNoTexto(caso.consultas.focusData);
+    if (datas.length && !datas.some(dataDoFocusEmUso)) out.focus = { registrado: dataTxt(datas[0]), atual: FOCUS.dataTxt,
+      texto: `A data registrada (${dataTxt(datas[0])}) não é a da edição escolhida para o caso: o caso usa o Focus de ${FOCUS.dataTxt}. Clique em “Preencher a data do relatório” para atualizar.` };
+  }
+  if (edicaoEmUso(caso, 'ipea') && IPEA.numero) {
+    const nums = cartasNoTexto(caso.consultas.ipeaTitulo);
+    if (nums.length && !nums.includes(Number(IPEA.numero))) out.ipea = { registrado: `nº ${nums[0]}`, atual: `nº ${IPEA.numero}`,
+      texto: `O título registrado é o da Carta nº ${nums[0]}; o caso usa a Carta nº ${IPEA.numero}. Clique em “Preencher o título” para atualizar.` };
+  }
+  return out;
+}
+
+// O texto de "Projeções publicadas — fonte e data" ficou desatualizado em relação aos valores ou à edição do caso?
+//   1) cita o Focus de outra data, ou outra Carta, e não cita a edição em uso;
+//   2) foi listado automaticamente e, depois disso, os valores ou as referências do cenário mudaram
+//      (publicadasLista guarda o que o botão "Listar automaticamente" gerou da última vez).
+export function avisoPublicadas(caso, sId) {
+  const cen = caso.cenarios[sId], texto = String(cen.publicadas || '').trim();
+  if (!texto) return null;
+  const sugestao = 'Confira os valores deste cenário e clique de novo em “Listar automaticamente”.';
+  if (edicaoEmUso(caso, 'focus')) {
+    const datas = datasDoFocusNoTexto(texto), outra = datas.find(x => !dataDoFocusEmUso(x));
+    if (outra && !datas.some(dataDoFocusEmUso)) return { tipo: 'edicao', texto: `Este texto cita o Focus de ${dataTxt(outra)}; o caso usa a edição de ${FOCUS.dataTxt}. ${sugestao}` };
+  }
+  if (edicaoEmUso(caso, 'ipea') && IPEA.numero) {
+    const nums = cartasNoTexto(texto), outra = nums.find(n => n !== Number(IPEA.numero));
+    if (outra !== undefined && !nums.includes(Number(IPEA.numero))) return { tipo: 'edicao', texto: `Este texto cita a Carta de Conjuntura nº ${outra}; o caso usa a Carta nº ${IPEA.numero}. ${sugestao}` };
+  }
+  if (typeof cen.publicadasLista === 'string') {
+    const agora = listaPublicadas(caso, sId);
+    if (agora !== cen.publicadasLista) {
+      const editado = texto !== cen.publicadasLista.trim();
+      return { tipo: 'valores', revisavel: editado, texto: agora
+        ? 'Os valores ou as referências deste cenário mudaram depois que este texto foi listado. Clique de novo em “Listar automaticamente”.'
+        : 'Nenhum valor deste cenário vem hoje de uma referência publicada, mas este texto ainda lista projeções publicadas. Apague-o ou reescreva-o.' };
+    }
+  }
+  return null;
+}
+
+// O mesmo dado (série e período) de uma evidência da etapa 2 na edição que o caso usa agora; null se não existir.
+export function equivalenteAtual(o) {
+  if (o.fonte === 'focus') {
+    const linha = (o.tipo === 'mensal' ? FOCUS.mensal : FOCUS.anual).find(x => x.id === o.indicador);
+    return linha?.v[o.periodo] ? evidenciaFocus(linha, o.periodo, o.tipo) : null;
+  }
+  const r = IPEA.registros.find(x => x.id === o.registro) || (o.chave ? IPEA.registros.find(x => x.chave === o.chave && (x.ano || null) === (o.ano || null)) : null);
+  return r ? evidenciaIpea(r) : null;
+}
+// Evidência da etapa 2 que veio de outra edição, tem equivalente na edição em uso e ainda não foi atualizada nem mantida pelo autor.
+export function evidenciaDeOutraEdicao(caso, v) {
+  const o = v.origem;
+  if (!o || !tem(v.dado)) return false;
+  const emUso = edicaoEmUso(caso, o.fonte);
+  return Boolean(emUso && o.edicao && o.edicao !== emUso.edicao && o.mantida !== emUso.edicao && equivalenteAtual(o));
+}
+
+const enumerar = (itens, max = 3) => { const l = itens.slice(0, max), resto = itens.length - l.length; return `${l.join('; ')}${resto > 0 ? `; e mais ${resto}` : ''}`; };
+// Divergências de origem do caso inteiro, já como itens de pendência do roteiro (etapas 2 e 3). Lista vazia = nada a avisar.
+export function divergencias(caso) {
+  const out = [], vars = variaveisAtivas(caso);
+  const add = (etapa, id, texto, detalhe) => out.push({ etapa, id, texto, detalhe });
+
+  const antigas = vars.filter(v => evidenciaDeOutraEdicao(caso, v));
+  if (antigas.length) add(2, 'ev_edicao', 'Evidências na edição dos relatórios escolhida para o caso', `${enumerar(antigas.map(v => v.nome))}: ${antigas.length === 1 ? 'dado' : 'dados'} de outra edição; atualize ou mantenha no cartão da variável`);
+  const cons = avisosConsultas(caso);
+  if (cons.focus) add(2, 'consulta_focus', 'Data da consulta ao Focus igual à da edição escolhida para o caso', `registrada: ${cons.focus.registrado}; edição do caso: ${cons.focus.atual}`);
+  if (cons.ipea) add(2, 'consulta_ipea', 'Título da Carta de Conjuntura igual ao da edição escolhida para o caso', `registrado: ${cons.ipea.registrado}; edição do caso: ${cons.ipea.atual}`);
+
+  const porTipo = { origem: [], edicao: [], periodo: [] };
+  for (const v of vars) for (const s of CENARIOS) for (const a of avisosDoValor(caso, v, s.id)) porTipo[a.tipo].push(`${v.nome}, cenário ${s.curto.toLowerCase()}`);
+  const n = porTipo.origem.length;
+  if (n) add(3, 'val_origem', 'Origem de cada valor dos cenários registrada', `${n === 1 ? '1 valor sem origem' : `${n} valores sem origem`}: confira ou escolha de novo a referência`);
+  if (porTipo.edicao.length) add(3, 'val_edicao', 'Valores dos cenários na edição dos relatórios escolhida para o caso', `${enumerar(porTipo.edicao)}: de outra edição`);
+  if (porTipo.periodo.length) add(3, 'val_periodo', 'Referências dos cenários dentro do horizonte do caso', `${enumerar(porTipo.periodo)}: referência de outro período`);
+  const textos = CENARIOS.filter(s => avisoPublicadas(caso, s.id));
+  if (textos.length) add(3, 'txt_publicadas', 'Texto de “Projeções publicadas — fonte e data” em dia com os valores e a edição do caso', `${textos.length === 1 ? 'cenário' : 'cenários'} ${cenariosTxt(textos.map(s => s.id)).toLowerCase()}: clique de novo em “Listar automaticamente”`);
+  return out;
 }
 
 export function direcao(valor, referencia) {
@@ -167,6 +362,9 @@ export function validar(caso) {
   add(2, 'interpretacao', 'Tendência e implicação para o mercado da empresa em cada variável', vars.length >= 3 && interpretadas.length === vars.length, `${interpretadas.length} de ${vars.length || 3}`);
   add(2, 'focus', 'Consulta ao Relatório Focus registrada (data e contribuição)', tem(caso.consultas.focusData) && tem(caso.consultas.focusTexto));
   add(2, 'ipea', 'Consulta à Carta de Conjuntura do Ipea registrada (título e argumento central)', tem(caso.consultas.ipeaTitulo) && tem(caso.consultas.ipeaTexto));
+  // Avisos de origem (edição, período, origem não registrada): só entram na lista quando existem, sempre como pendência.
+  const diverg = divergencias(caso);
+  for (const d of diverg.filter(x => x.etapa === 2)) add(2, d.id, d.texto, false, d.detalhe);
 
   const meses = mesesHorizonte(caso.ident);
   add(3, 'horizonte', 'Horizonte comum de 12 meses definido', meses === 12, meses ? `${meses} meses` : '');
@@ -181,6 +379,7 @@ export function validar(caso) {
     return b !== null && f !== null && a !== null && (b !== f || b !== a);
   });
   add(3, 'coerencia', 'Cenários coerentes e diferenciados entre si', distintos, distintos ? '' : 'os valores dos três cenários ainda são iguais ou estão incompletos');
+  for (const d of diverg.filter(x => x.etapa === 3)) add(3, d.id, d.texto, false, d.detalhe);
 
   for (const s of CENARIOS) {
     const i = caso.impactos[s.id];
